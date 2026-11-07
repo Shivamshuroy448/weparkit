@@ -83,6 +83,15 @@ def test_hazard_lifecycle(client):
     assert client.get("/api/hazards").json()["hazards"] == []
 
 
+def test_clearing_override_restores_engine_reason(client):
+    auto = client.post("/api/satellite/demo-storm").json()["state"]
+    on = client.post("/api/state/mode", json={"mode": "standard"}).json()
+    assert on["decision_source"] == "manual_override" and "Manual" in on["reason"]
+    off = client.post("/api/state/mode", json={"mode": None}).json()
+    assert off["decision_source"] == "demo_storm_replay" and "Manual" not in off["reason"]
+    assert off["reason"] == auto["reason"]
+
+
 def test_locate_endpoint(client):
     lot = client.get("/api/parking/lots").json()["lots"][0]
     r = client.get("/api/parking/locate", params={"lat": lot["lat"], "lng": lot["lng"], "accuracy_m": 8}).json()

@@ -38,6 +38,7 @@ npx expo install --fix                      # if Expo warns about versions
 - Realtime: `services/realtime.py` `hub.publish(event)` with events
   `lots | state | hazards | notifications | crew | satellite`; the mobile store refetches that resource.
   Polling every 15 s is the fallback.
+- Web (`npx expo start --web`) works: `CampusMap.web.tsx` is a DOM-SVG schematic because react-native-maps (and react-native-svg pressable groups) crash in the browser.
 - Mobile theming: `useStore().c` is the palette; `c.accent` flips cyan → orange in ice season.
   Use the primitives in `mobile/src/components/ui.tsx` (Screen, Card, T, Button, Pill, DemoTag...).
 - API base URL: `mobile/src/config.ts` (EXPO_PUBLIC_API_URL → Metro host IP:8000 → emulator fallbacks).
