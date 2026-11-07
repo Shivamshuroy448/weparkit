@@ -1,0 +1,4 @@
+# Optional: real YOLOv8 vehicle + person detection (pulls in PyTorch, ~1-2 GB).
+# pip install -r requirements-ml.txt   then set VISION_PROVIDER=auto (default) or yolo.
+# yolov8n.pt downloads automatically on first use.
+ultralytics>=8.2

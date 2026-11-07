@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+backend/.env
+backend/data/icestation.db
+backend/data/uploads/*
+backend/data/satellite/*
+!backend/data/uploads/.gitkeep
+!backend/data/satellite/.gitkeep
+*.pt
+
+# Expo / Node
+mobile/node_modules/
+mobile/.expo/
+mobile/dist/
+mobile/web-build/
+mobile/.env
+mobile/expo-env.d.ts
+mobile/ios/
+mobile/android/
+npm-debug.*
+.DS_Store

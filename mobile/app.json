@@ -1,0 +1,55 @@
+{
+  "expo": {
+    "name": "IceStation UB",
+    "slug": "icestation-ub",
+    "scheme": "icestation",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#080B18",
+    "splash": {
+      "backgroundColor": "#080B18",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "edu.buffalo.icestation",
+      "infoPlist": {
+        "NSCameraUsageDescription": "IceStation uses the camera to scan parking lots and icy walkways.",
+        "NSPhotoLibraryUsageDescription": "IceStation lets you pick a lot or walkway photo to analyse.",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        },
+        "NSLocationWhenInUseUsageDescription": "IceStation uses your location to tell which parking lot or walkway you are reporting from."
+      }
+    },
+    "android": {
+      "package": "edu.buffalo.icestation",
+      "permissions": [
+        "CAMERA",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ],
+      "usesCleartextTraffic": true
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "IceStation uses the camera to scan parking lots and icy walkways."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "IceStation uses your location to tell which parking lot or walkway you are reporting from."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

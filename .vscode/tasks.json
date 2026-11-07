@@ -1,0 +1,58 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Backend: install",
+      "type": "shell",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "command": "python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && .venv/bin/python -m scripts.init_db",
+      "windows": { "command": "py -m venv .venv; .venv\\Scripts\\pip install -r requirements.txt; .venv\\Scripts\\python -m scripts.init_db" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Backend: run",
+      "type": "shell",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "command": ".venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+      "windows": { "command": ".venv\\Scripts\\uvicorn app.main:app --reload --host 0.0.0.0 --port 8000" },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Backend: test",
+      "type": "shell",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "command": ".venv/bin/python -m pytest -q",
+      "windows": { "command": ".venv\\Scripts\\python -m pytest -q" },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Mobile: install",
+      "type": "shell",
+      "options": { "cwd": "${workspaceFolder}/mobile" },
+      "command": "npm install && npx expo install --fix",
+      "problemMatcher": []
+    },
+    {
+      "label": "Mobile: start (Expo Go)",
+      "type": "shell",
+      "options": { "cwd": "${workspaceFolder}/mobile" },
+      "command": "npx expo start",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Mobile: typecheck",
+      "type": "shell",
+      "options": { "cwd": "${workspaceFolder}/mobile" },
+      "command": "npx tsc --noEmit",
+      "problemMatcher": "$tsc"
+    },
+    {
+      "label": "Run everything",
+      "dependsOn": ["Backend: run", "Mobile: start (Expo Go)"],
+      "problemMatcher": []
+    }
+  ]
+}
