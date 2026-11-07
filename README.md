@@ -43,7 +43,7 @@ source .venv/bin/activate            # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env                 # optional, everything works without keys
 python -m scripts.init_db
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --timeout-graceful-shutdown 2
 ```
 `--host 0.0.0.0` matters: your phone has to reach the laptop. API docs: http://localhost:8000/docs
 

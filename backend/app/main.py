@@ -1,4 +1,4 @@
-"""IceStation UB API.  Run:  uvicorn app.main:app --reload --host 0.0.0.0 --port 8000   Docs: /docs"""
+"""IceStation UB API.  Run:  uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --timeout-graceful-shutdown 2   Docs: /docs"""
 from __future__ import annotations
 
 import asyncio
@@ -66,7 +66,8 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="IceStation UB API", version="1.0.0", lifespan=lifespan,
               description="Mission control for UB North Campus parking and winter safety. Hackathon prototype.")
-app.add_middleware(CORSMiddleware, allow_origins=settings.cors_list, allow_credentials=True,
+app.add_middleware(CORSMiddleware, allow_origins=settings.cors_list, allow_origin_regex=settings.cors_origin_regex or None,
+                   allow_credentials=True,
                    allow_methods=["*"], allow_headers=["*"])
 
 for r in (parking.router, orbital.weather_router, orbital.satellite_router, orbital.system_router,

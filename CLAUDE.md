@@ -12,7 +12,7 @@ walkway-safety app for UB North Campus. Read README.md for the product pitch and
 ## Commands
 ```bash
 # backend (from backend/, venv active)
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --timeout-graceful-shutdown 2
 python -m pytest -q
 python -m scripts.init_db --reset          # wipe + reseed
 python -m scripts.generate_samples         # rebuild synthetic sample photos
@@ -75,8 +75,9 @@ Full docs at `/docs`.
 - Windows: venv python is `backend\.venv\Scripts\python.exe`. Windows Firewall blocks phones on Public networks:
   allow inbound TCP 8000 and 8081 (admin PowerShell) or use a hotspot / tunnel.
 - `expo start --tunnel` only tunnels Metro; set `EXPO_PUBLIC_API_URL` to a public backend URL in that case.
-- Phones can't reach `localhost`; run uvicorn with `--host 0.0.0.0`. Campus Wi-Fi may block device-to-device
-  traffic; use a hotspot or tunnels.
+- Phones can't reach `localhost`; run uvicorn with `--host 0.0.0.0`. Keep `--timeout-graceful-shutdown 2`: without it `--reload` hangs while phones hold the /ws socket open.
+- Expo web from another device: `config.ts` uses `window.location.hostname:8000`; CORS allows private LAN origins via `CORS_ORIGIN_REGEX`.
+- Campus Wi-Fi may block device-to-device traffic; use a hotspot or tunnels.
 - OpenCV 5 removed `CascadeClassifier`; `requirements.txt` installs 4.x so Haar face/plate blur works.
   The privacy module degrades gracefully either way.
 - `SIM_CLOCK=09:40` in `backend/.env` makes the seed model behave like a weekday morning for night-time demos.
