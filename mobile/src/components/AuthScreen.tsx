@@ -16,6 +16,7 @@ type Mode = "login" | "signup";
 const ALLOWED_EMAIL = /^[a-z0-9][a-z0-9._%+-]{0,63}@(buffalo\.edu|gmail\.com)$/i;
 
 const UB_PRESETS = [
+  { label: "svelamak", desc: "Shivamshu Roy" },
   { label: "sroy", desc: "Commuter" },
   { label: "victor_bull", desc: "Student" },
   { label: "capen_scholar", desc: "Resident" },

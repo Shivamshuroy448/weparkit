@@ -7,6 +7,7 @@ AUTH_DEV_CODES=true the code is returned as `dev_code` (the app labels it DEMO);
 from __future__ import annotations
 
 import re
+import subprocess
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -165,6 +166,43 @@ class UbSsoIn(BaseModel):
     anonymous_user_id: int | None = None
 
 
+def lookup_ub_directory(ubit: str) -> dict | None:
+    """Verifies whether a UBITName exists in the official University at Buffalo LDAP directory (Whitepages)
+    or is a recognized campus demonstration account."""
+    demo_accounts = {
+        "sroy": {"name": "Sroy", "role": "Commuter"},
+        "svelamak": {"name": "Shivamshu Roy Velamakanni", "role": "Student Commuter"},
+        "victor_bull": {"name": "Victor E. Bull", "role": "Student"},
+        "victor.bull": {"name": "Victor E. Bull", "role": "Student"},
+        "capen_scholar": {"name": "Capen Scholar", "role": "Faculty / Staff"},
+    }
+    if ubit in demo_accounts:
+        return demo_accounts[ubit]
+
+    # Live LDAP query against official University at Buffalo directory (Whitepages)
+    try:
+        res = subprocess.run(
+            [
+                "ldapsearch", "-x", "-H", "ldap://ldap.buffalo.edu",
+                "-b", "o=University at Buffalo,c=US", "-s", "sub",
+                f"(uid={ubit})", "cn", "mail"
+            ],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        cn = None
+        for line in res.stdout.splitlines():
+            if line.startswith("cn:"):
+                cn = line.split(":", 1)[1].strip()
+                break
+        if cn:
+            return {"name": cn, "role": "Student"}
+    except Exception:
+        pass
+    return None
+
+
 @router.post("/ub-sso")
 def ub_sso(body: UbSsoIn, db: Session = Depends(get_db)):
     """University at Buffalo Central Authentication Service (Shibboleth / CAS).
@@ -181,9 +219,11 @@ def ub_sso(body: UbSsoIn, db: Session = Depends(get_db)):
     email = f"{ubit}@buffalo.edu"
     auth.check_not_locked(email)
 
+    ub_info = lookup_ub_directory(ubit)
     acct = db.scalar(select(Account).where(Account.email == email))
+
     if acct is not None:
-        # Strictly verify the password against the stored hash
+        # Existing account: strictly verify the password against the stored hash
         if not auth.verify_password(body.password, acct.password_hash):
             auth.record_failure(email)
             raise HTTPException(401, "Invalid UBITName or password. Enter your correct UBIT credentials.")
@@ -192,21 +232,25 @@ def ub_sso(body: UbSsoIn, db: Session = Depends(get_db)):
             acct.email_verified = True
             db.commit()
     else:
-        # First-time registration with this UBITName: establish student account with this password
+        # First-time registration with this UBITName: must be a verified identity in UB directory
+        if ub_info is None:
+            raise HTTPException(401, f"UBITName '{ubit}' is not recognized in the University at Buffalo directory. Please enter your valid UBITName.")
+
         if len(body.password) < 8:
             raise HTTPException(422, "New UBIT password must be at least 8 characters (UB IT policy).")
 
         user = db.get(User, body.anonymous_user_id) if body.anonymous_user_id else None
+        student_name = ub_info.get("name") or ubit.capitalize()
         if user is None or user.is_seed or db.scalar(select(Account).where(Account.user_id == user.id)):
-            user = User(handle=auth.unique_handle(db, ubit.capitalize(), email), is_anonymous=False)
+            user = User(handle=auth.unique_handle(db, student_name, email), is_anonymous=False)
             db.add(user)
             db.flush()
         else:
             user.is_anonymous = False
-            user.handle = auth.unique_handle(db, ubit.capitalize(), email)
-        
+            user.handle = auth.unique_handle(db, student_name, email)
+
         acct = Account(email=email, password_hash=auth.hash_password(body.password),
-                       name=ubit.capitalize(), user_id=user.id, email_verified=True)
+                       name=student_name, user_id=user.id, email_verified=True)
         db.add(acct)
         db.commit()
 

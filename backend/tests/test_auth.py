@@ -143,5 +143,10 @@ def test_ub_single_sign_on(client):
     r2 = client.post("/api/auth/ub-sso", json={"ubit_name": "victor.bull@buffalo.edu", "password": "snowday-2026"}).json()
     assert r2["token"] and r2["account"]["email"] == "victor.bull@buffalo.edu"
 
+    # Random fake UBITName that does not exist in UB directory is rejected (NOT signed up)
+    fake = client.post("/api/auth/ub-sso", json={"ubit_name": "randomfakestudent999", "password": "snowday-2026"})
+    assert fake.status_code == 401
+    assert "not recognized in the University at Buffalo directory" in fake.json()["detail"]
+
     # Invalid UBITName format rejected
     assert client.post("/api/auth/ub-sso", json={"ubit_name": "x", "password": "snowday-2026"}).status_code == 422
