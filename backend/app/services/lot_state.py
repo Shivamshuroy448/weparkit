@@ -11,6 +11,7 @@ from ..config import get_settings
 from ..models import Notification, ParkingLot, ParkingReport, SystemState
 from ..timeutil import iso, utcnow
 from .recommendation import LotSnapshot, profile_at, search_minutes
+from .sessions import occupancy_adjustment
 
 settings = get_settings()
 
@@ -87,7 +88,9 @@ def lot_status(db: Session, lot: ParkingLot, state: SystemState) -> dict:
         snow_source = "ice-season default"
 
     snow_cap = round(lot.total_capacity * (1 - snow))
-    occupied = min(snow_cap, round(occ * snow_cap))
+    # Students who checked in / out since the last report move the estimate by one car each.
+    adj, checked_in = occupancy_adjustment(db, lot.id, report.created_at if report else None, now_utc)
+    occupied = max(0, min(snow_cap, round(occ * snow_cap) + adj))
     available = max(0, snow_cap - occupied)
     departures = pending_departures(db, lot.id, now_utc)
 
@@ -112,6 +115,8 @@ def lot_status(db: Session, lot: ParkingLot, state: SystemState) -> dict:
         "unplowed_rows": report.unplowed_rows if report else None,
         "total_rows": lot.total_rows,
         "pending_departures": departures,
+        "checked_in": checked_in,
+        "checkin_adjustment": adj,
         "search_minutes": round(search_minutes(occ, ice, settings.ice_search_time_multiplier), 1),
         "hourly_profile": lot.hourly_profile,
         "simulated_clock": simulated,

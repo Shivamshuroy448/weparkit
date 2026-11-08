@@ -1,4 +1,4 @@
-# IceStation UB 🛰️❄️
+# WeParkit 🛰️❄️
 
 **Parking that knows it's winter in Buffalo.** UB Hacking 2026 · Theme: Deep Space
 
@@ -8,7 +8,7 @@ the snow arrives.
 
 ```
 icestation-ub/
-├── backend/          Python FastAPI + SQLAlchemy + SQLite + OpenCV   (complete, 77 tests passing)
+├── backend/          Python FastAPI + SQLAlchemy + SQLite + OpenCV   (complete, 120 tests passing)
 │   ├── app/
 │   │   ├── main.py             app, WebSocket /ws, media, expiry loop
 │   │   ├── models.py           11 tables + SystemState
@@ -44,7 +44,7 @@ source .venv/bin/activate            # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env                 # optional, everything works without keys
 python -m scripts.init_db
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --timeout-graceful-shutdown 2
+python -m scripts.serve      # supervised: auto-restarts on crash/hang (or: uvicorn app.main:app --host 0.0.0.0 --port 8000 --timeout-keep-alive 75)
 ```
 `--host 0.0.0.0` matters: your phone has to reach the laptop. API docs: http://localhost:8000/docs
 
@@ -64,7 +64,7 @@ In VS Code: **Terminal → Run Task → "Backend: install"**, then **"Run everyt
 
 ### Tests
 ```bash
-cd backend && python -m pytest -q        # 77 tests: recommendation, ice-season logic, GPS lot matching, voice, API flows
+cd backend && python -m pytest -q        # 120 tests: recommendation, ice season, GPS lots, auth, voice co-pilot, resilience, API flows
 cd mobile && npx tsc --noEmit
 ```
 
@@ -86,8 +86,12 @@ cd mobile && npx tsc --noEmit
 | Parking map with open-space counts; tap a lot → Google Maps driving directions | Works (Google Maps tiles on Android; Apple Maps tiles in iOS Expo Go; schematic on web) |
 | Spoken briefings (ElevenLabs): recommendation and per-lot summary | Works when `ELEVENLABS_API_KEY` is set; buttons hidden otherwise |
 | Drive mode: gesture pad (tap / swipe / long-press / shake), voice questions via ElevenLabs speech-to-text, proactive ice-season and lot-full alerts | Works; device-voice fallback without a key |
+| Accounts: email + password (UB or Gmail), signed in on signup; optional Google sign-in | Works; Google needs `GOOGLE_CLIENT_IDS` and doesn't work inside Expo Go |
+| "Yes, I'm parked" / "I left" with GPS lot detection (nearest lot within 400 m) and live count updates | Works; auto-detect only while the app is open |
+| Conversational voice co-pilot (follow-ups, "thanks" ends it, free-form via Gemini) | Works with ElevenLabs + Gemini keys |
+| Supervised API (`python -m scripts.serve`): restarts on crash or hang; errors return JSON, never crash the process | Works |
 | GPS lot identification (point-in-outline, accuracy-aware radius, manual override) | Works (`/api/parking/locate`); lot-sign OCR backup not built |
-| Lot outlines | Jarvis, Hochstetter, Center for Tomorrow traced from OpenStreetMap (© OpenStreetMap contributors, ODbL); Stadium Lot is an approximate box |
+| Lot outlines | All 34 UB North Campus lots from OpenStreetMap (© OpenStreetMap contributors, ODbL), names checked against maps.buffalo.edu; capacities are area-based estimates except Center for Tomorrow (400, OSM-tagged) |
 | Demo storm replay | **Demo**: simulated frames (or real frames in `backend/data/storm_frames/`) + DEMO NWS alert |
 | Sample photos | **Demo**: synthetic, watermarked |
 | Lot capacities, hourly occupancy | **Seed estimates**, not UB data |
@@ -110,5 +114,5 @@ cd mobile && npx tsc --noEmit
 5. Hand a judge a phone: **Scan → Camera** on anything, or **Leaving now**.
 6. **Reset data** for the next judge.
 
-Honesty notes for judges: IceStation predicts and informs; it never reserves a space.
+Honesty notes for judges: WeParkit predicts and informs; it never reserves a space.
 Occupancy is from student reports or a seed model, not live UB Parking data.

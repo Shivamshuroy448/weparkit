@@ -6,6 +6,9 @@ venv/
 .pytest_cache/
 backend/.env
 backend/data/icestation.db
+backend/data/icestation.db-wal
+backend/data/icestation.db-shm
+backend/data/*.db-journal
 backend/data/uploads/*
 backend/data/satellite/*
 !backend/data/uploads/.gitkeep

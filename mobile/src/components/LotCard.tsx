@@ -5,7 +5,11 @@ import { space } from "../theme";
 import { Badge, DemoTag, Field, ProgressBar, T, row } from "./ui";
 
 /** One lot as a list row: name, open count, fill bar; `detailed` adds the breakdown and provenance. */
-export default function LotRow({ lot, detailed = false, highlight = false }: { lot: Lot; detailed?: boolean; highlight?: boolean }) {
+const KIND_LABEL: Record<string, string> = {
+  commuter: "Commuter", residence: "Residence", visitor: "Visitor (paid)", event: "Event / overflow", park_and_ride: "Park & ride",
+};
+
+export default function LotRow({ lot, detailed = false, highlight = false, distanceM }: { lot: Lot; detailed?: boolean; highlight?: boolean; distanceM?: number | null }) {
   const { c } = useStore();
   const full = lotFull(lot);
   return (
@@ -16,7 +20,7 @@ export default function LotRow({ lot, detailed = false, highlight = false }: { l
             <T v="subheading" numberOfLines={1}>{lot.name}</T>
             {highlight && <Badge tone="accent">Recommended</Badge>}
           </View>
-          <T v="caption" numberOfLines={1}>{lot.kind === "park_and_ride" ? "Park & ride" : "Commuter lot"} · {sourceLabel(lot.data_source)}</T>
+          <T v="caption" numberOfLines={1}>{KIND_LABEL[lot.kind] ?? "Lot"}{distanceM != null ? ` · ${distanceM < 1000 ? `${distanceM} m` : `${(distanceM / 1000).toFixed(1)} km`}` : ""} · {sourceLabel(lot.data_source)}</T>
         </View>
         <View style={{ alignItems: "flex-end" }}>
           <T v="subheading" color={full ? c.warn : c.text} style={{ fontVariant: ["tabular-nums"] }}>{full ? "Full" : `${lot.available} open`}</T>
@@ -36,8 +40,10 @@ export default function LotRow({ lot, detailed = false, highlight = false }: { l
             {lot.data_source === "demo" && <DemoTag label="Demo scan" />}
             {lot.pending_departures > 0 && <Badge tone="success">{lot.pending_departures} leaving soon</Badge>}
             {lot.snow_source === "ice-season default" && <Badge tone="warn">Ice season −18%</Badge>}
+            {lot.capacity_is_seed_estimate && <Badge>Capacity est.</Badge>}
             <Badge>{Math.round(lot.confidence * 100)}% confidence</Badge>
           </View>
+          {lot.description ? <T v="caption">{lot.description}</T> : null}
           <T v="caption">{lot.last_update ? `Updated ${ago(lot.last_update)}` : "Model estimate. No student report in the last 30 min."}</T>
         </View>
       )}

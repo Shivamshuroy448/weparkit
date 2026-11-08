@@ -1,18 +1,42 @@
-# CLAUDE.md: IceStation UB
+# CLAUDE.md: WeParkit (repo: icestation-ub)
 
 Hackathon prototype (UB Hacking 2026, theme Deep Space). Satellite-triggered winter parking and
 walkway-safety app for UB North Campus. Read README.md for the product pitch and run steps.
 
 ## Layout
-- `backend/`: FastAPI + SQLAlchemy 2 + SQLite + OpenCV. Python 3.11+. **Complete, 77 tests pass.**
+- `backend/`: FastAPI + SQLAlchemy 2 + SQLite + OpenCV. Python 3.11+. **Complete, 120 tests pass.**
 - `mobile/`: Expo SDK 58, React Native 0.88, React 19.3, expo-router (file routes in `app/`), TypeScript strict.
   **Type-checks clean and bundles for Android (`npx expo export --platform android`). Not yet run on a device.**
 - The original spec asked for a React web frontend; the team switched to Expo to match the pitch deck. There is no web frontend.
 
+## Added 2026-11-07 (WeParkit)
+- **Run the API with `python -m scripts.serve`** (backend/): supervisor that restarts uvicorn on crash, and on hang
+  (watchdog on `/api/live`). Uses `--timeout-keep-alive 75`. Avoid `--reload` on Windows (orphaned workers keep the port).
+- Resilience (`app/main.py`): global handlers turn every error into JSON with `request_id`; SQLite `OperationalError` ->
+  503 + Retry-After; 20 MB body cap; thread pool 100; startup retries DB and never aborts on samples/cache warm-up;
+  `/api/health` reports `degraded` components instead of failing. SQLite runs in WAL with busy_timeout (`database.py`).
+  External APIs (NOAA, NWS) are behind a stale-while-revalidate cache (`services/swr.py`): requests never wait on them.
+- **Auth** (`routers/auth.py`, `services/auth.py`): email + password for `AUTH_EMAIL_DOMAINS` (default
+  buffalo.edu, gmail.com); signup signs you straight in. scrypt passwords, SHA-256-stored Bearer tokens (30 d),
+  5-failure login lockout. Optional email codes (`AUTH_VERIFY_EMAIL=true`; SMTP_* to send, else `dev_code` in dev).
+  Google sign-in: `POST /api/auth/google` verifies the ID token with Google (aud = `GOOGLE_CLIENT_IDS`); button hidden
+  until configured, and it can't work in Expo Go (Google rejects exp:// redirects). `AUTH_REQUIRED=true` makes
+  check-in/out/profile require a token. App: `src/auth.tsx` + `AuthScreen` gate everything; token in
+  expo-secure-store (localStorage on web).
+- **Parked / not parked** (`services/sessions.py`, `src/parking.tsx`, `ParkingStatus.tsx`): check-in/out move the lot's
+  occupied count by one car; "Yes, I'm parked" uses the lot you're in or the nearest within 400 m; foreground
+  auto-detect (driving -> still in an outline = check in; driving away = check out) in `src/parkDetect.ts`.
+- **All UB lots**: `python -m scripts.import_osm_lots` builds `app/ub_lots.json` (34 named UB-operated lots, real OSM
+  outlines, capacities estimated at ~32.7 m2/stall calibrated on OSM-tagged lots; CFT 400 is tagged). Names cross-checked
+  with maps.buffalo.edu. Fixed: Jarvis A outline was Jarvis B; Center for Tomorrow is on Service Center Rd (south).
+  Original 4 lots keep slugs/ids 1-4; startup sync inserts new lots and updates config fields.
+- Voice co-pilot is conversational: `conversation_id` memory, follow-ups, "thanks" ends, free-form -> Gemini
+  (`services/llm.py`) with live data. App `src/copilot.ts`: VAD on recorder metering (adaptive noise floor).
+
 ## Commands
 ```bash
 # backend (from backend/, venv active)
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --timeout-graceful-shutdown 2
+python -m scripts.serve                    # supervised API (restarts on crash/hang), port 8000
 python -m pytest -q
 python -m scripts.init_db --reset          # wipe + reseed
 python -m scripts.generate_samples         # rebuild synthetic sample photos
@@ -45,8 +69,8 @@ npx expo install --fix                      # if Expo warns about versions
   sentence-case copy: no space role-play wording (mission control, cadet, beam, orbit) in UI or API strings.
 - Tabs: Overview · Plan · Scan · Walkways · Satellite. Profile (`crew.tsx`) opens from the header, not the tab bar.
 - Voice: ElevenLabs key is **server-only** (`ELEVENLABS_API_KEY`). `services/voice.py` builds the spoken text itself
-  (no open TTS proxy) and caches audio; mobile `src/voice.ts` streams `/api/voice/*` via expo-audio and hides
-  Listen buttons unless `/api/health` reports `voice_enabled`.
+  (no open TTS proxy) and caches audio; mobile `src/voice.ts` streams `/api/voice/*` via expo-audio and falls back
+  to the device voice (expo-speech) reading the same server script when ElevenLabs is off or unreachable.
 - Directions: `directionsUrl()` in `src/api.ts` opens Google Maps driving directions; `LotSheet` on both maps.
 - Drive mode (`app/drive.tsx`): full-screen gesture pad (tap/swipe ←→↑↓/long-press/shake), keep-awake, haptics.
   Swipe down records 5 s → `/api/voice/ask`. Intents are parsed by `services/copilot.py` (pure, tested, keyword
@@ -74,8 +98,8 @@ Full docs at `/docs`.
 3. **Test YOLOv8 path:** `pip install -r requirements-ml.txt`, set `VISION_PROVIDER=yolo`, run a real lot photo.
 4. **Lot identification (pitch slide 4):** GPS part DONE: `services/geo.py` (pure, tested) + `/api/parking/locate`
    + `mobile/src/location.ts` (`useLotLocator`) on Scan and Dock; a manual pick always overrides GPS.
-   Jarvis/Hochstetter/Center for Tomorrow use real OSM outlines (`OSM_OUTLINES` in `campus.py`, ODbL attribution);
-   Stadium Lot is still an approximate box. Remaining backups: lot-sign OCR via Gemini, ORB reference-photo matching.
+   All 34 lots use real OSM outlines (`app/ub_lots.json` via `scripts/import_osm_lots.py`, ODbL attribution).
+   Remaining backups: lot-sign OCR via Gemini, ORB reference-photo matching. Capacities are still area estimates.
 5. **Class-schedule fill model (pitch slide 5):** replace `hourly_profile` seed curves with 15-minute predictions
    from UB's public class schedule near each lot.
 6. Push notifications (expo-notifications) for Leaving now / Stuck in orbit / ice season.
@@ -88,6 +112,9 @@ Full docs at `/docs`.
 - Windows: venv python is `backend\.venv\Scripts\python.exe`. Windows Firewall blocks phones on Public networks:
   allow inbound TCP 8000 and 8081 (admin PowerShell) or use a hotspot / tunnel.
 - `expo start --tunnel` only tunnels Metro; set `EXPO_PUBLIC_API_URL` to a public backend URL in that case.
+- Keep `--timeout-keep-alive 75` (> the app's 15 s poll). With uvicorn's 5 s default, phones reuse pooled connections the
+  server already closed; on eduroam the RST is dropped and requests hang until timeout ("Can't reach the backend").
+  The app also retries GETs once on a fresh connection (`src/api.ts`).
 - Phones can't reach `localhost`; run uvicorn with `--host 0.0.0.0`. Keep `--timeout-graceful-shutdown 2`: without it `--reload` hangs while phones hold the /ws socket open.
 - Expo web from another device: `config.ts` uses `window.location.hostname:8000`; CORS allows private LAN origins via `CORS_ORIGIN_REGEX`.
 - Campus Wi-Fi may block device-to-device traffic; use a hotspot or tunnels.

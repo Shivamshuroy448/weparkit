@@ -13,7 +13,9 @@ class Open(BaseModel):
 
 
 class HealthOut(BaseModel):
-    status: Literal["ok"]
+    status: Literal["ok", "degraded"]
+    degraded: list[str] = []
+    uptime_s: int = 0
     app: str
     mode: str
     vision_detector: str
@@ -82,6 +84,19 @@ class ReportIn(BaseModel):
     note: str = Field("", max_length=200)
     user_id: int | None = None
     is_demo: bool = False
+
+
+class CheckInIn(BaseModel):
+    user_id: int
+    lot_id: int
+    source: Literal["manual", "auto"] = "manual"
+    lat: float | None = Field(None, ge=-90, le=90)
+    lng: float | None = Field(None, ge=-180, le=180)
+
+
+class CheckOutIn(BaseModel):
+    user_id: int
+    source: Literal["manual", "auto"] = "manual"
 
 
 class LeaveIn(BaseModel):

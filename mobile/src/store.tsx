@@ -63,15 +63,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         case "crew": return loadUser();
       }
     }));
-    // Only network failures (status 0) count. One blip (backend reload, Wi-Fi hiccup) shouldn't flash a
-    // red banner, so it appears after two failed refreshes in a row and clears on the first success.
-    const netFail = results.find((r) => r.status === "rejected" && (r.reason as { status?: number })?.status === 0) as PromiseRejectedResult | undefined;
-    if (netFail) {
-      failures.current += 1;
-      if (failures.current >= 2) setBackendDown((netFail.reason as Error).message ?? "Backend unreachable");
-    } else if (results.some((r) => r.status === "fulfilled")) {
+    // "Unreachable" means every request in the refresh failed at the network level (status 0). One slow
+    // endpoint or a single Wi-Fi blip is retried quietly on the next poll; the banner needs two fully
+    // failed refreshes in a row and clears on the first success.
+    const reached = results.some((r) => r.status === "fulfilled" || (r.reason as { status?: number })?.status !== 0);
+    if (reached) {
       failures.current = 0;
       setBackendDown(null);
+    } else {
+      failures.current += 1;
+      const first = results[0] as PromiseRejectedResult | undefined;
+      if (failures.current >= 2) setBackendDown((first?.reason as Error)?.message ?? "Backend unreachable");
     }
   }, [loadUser]);
 

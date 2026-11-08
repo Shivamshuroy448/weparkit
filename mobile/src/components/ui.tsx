@@ -1,7 +1,7 @@
 import { Children, Fragment, isValidElement, type ReactNode } from "react";
 import {
-  ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, View,
-  type StyleProp, type TextStyle, type ViewStyle,
+  ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, TextInput, View,
+  type StyleProp, type TextInputProps, type TextStyle, type ViewStyle,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useStore } from "../store";
@@ -230,6 +230,29 @@ export function Toggle({ value, onChange, label }: { value: boolean; onChange: (
   const web = { activeThumbColor: "#fff", activeTrackColor: c.accent } as object;
   return <Switch value={value} onValueChange={onChange} accessibilityLabel={label} trackColor={{ true: c.accent, false: c.border }}
     thumbColor="#fff" ios_backgroundColor={c.border} {...web} />;
+}
+
+export function Input({ label, value, onChangeText, placeholder, secure, keyboardType, autoComplete, error, right, onSubmitEditing, maxLength, textContentType }: {
+  label: string; value: string; onChangeText: (v: string) => void; placeholder?: string; secure?: boolean;
+  keyboardType?: "default" | "email-address" | "number-pad"; autoComplete?: TextInputProps["autoComplete"];
+  textContentType?: TextInputProps["textContentType"]; error?: string | null; right?: ReactNode;
+  onSubmitEditing?: () => void; maxLength?: number;
+}) {
+  const { c } = useStore();
+  return (
+    <View style={{ gap: 6 }}>
+      <T v="label">{label}</T>
+      <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: c.surfaceSolid, borderRadius: radius.md,
+        borderWidth: StyleSheet.hairlineWidth * 2, borderColor: error ? c.danger : c.border, paddingHorizontal: space.md }}>
+        <TextInput value={value} onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor={c.textFaint}
+          secureTextEntry={secure} keyboardType={keyboardType} autoComplete={autoComplete} textContentType={textContentType}
+          autoCapitalize="none" autoCorrect={false} onSubmitEditing={onSubmitEditing} maxLength={maxLength} accessibilityLabel={label}
+          style={{ flex: 1, color: c.text, fontSize: 16, paddingVertical: 13 }} />
+        {right}
+      </View>
+      {error ? <T v="caption" color={c.danger}>{error}</T> : null}
+    </View>
+  );
 }
 
 export function Segmented<V extends string>({ options, value, onChange }: {

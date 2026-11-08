@@ -71,20 +71,38 @@ export default function CampusMap({ lots, hazards, meta, height = 300, highlight
             onClick={(e) => { e.stopPropagation(); setHzId(h.id); setSelId(null); }} style={{ cursor: "pointer" }} />;
         })}
         {/* Lot labels last so they sit above shapes: name + open-space pill */}
-        {lots.map((l) => {
-          const [x, y] = xy(l.lat, l.lng);
-          const full = lotFull(l);
-          const on = l.id === selId;
-          const label = full ? "Full" : String(l.available);
-          const w = 12 + label.length * 7;
-          return (
+        {/* Label placement with collision avoidance: selected, recommended, then most-open lots get pills;
+            a pill that would overlap one already placed becomes a small tappable dot instead. */}
+        {(() => {
+          const priority = (l: Lot) => (l.id === selId ? 2e6 : 0) + (selId == null && l.slug === highlightSlug ? 1e6 : 0) + l.available;
+          const placed: { x0: number; y0: number; x1: number; y1: number }[] = [];
+          const items = [...lots].sort((a, b) => priority(b) - priority(a)).map((l) => {
+            const [x, y] = xy(l.lat, l.lng);
+            const full = lotFull(l);
+            const on = l.id === selId;
+            const named = on || (selId == null && l.slug === highlightSlug) || lots.length <= 6;
+            const label = full ? "Full" : String(l.available);
+            const small = lots.length > 12 && !named;
+            const w = (small ? 8 : 12) + label.length * (small ? 5.5 : 7), h = small ? 14 : 20;
+            const box = { x0: x - w / 2 - 2, y0: y - h / 2 - (named ? 18 : 2), x1: x + w / 2 + 2, y1: y + h / 2 + 2 };
+            const clash = placed.some((p) => box.x0 < p.x1 && box.x1 > p.x0 && box.y0 < p.y1 && box.y1 > p.y0);
+            if (!clash) placed.push(box);
+            return { l, x, y, full, on, named, label, small, w, h, dot: clash && !on };
+          });
+          // draw low-priority first so important pills end up on top
+          return items.reverse().map(({ l, x, y, full, on, named, label, small, w, h, dot }) => (
             <g key={`t${l.id}`} onClick={(e) => { e.stopPropagation(); setSelId(l.id); setHzId(null); }} style={{ cursor: "pointer" }}>
-              <rect x={x - w / 2} y={y - 10} width={w} height={20} rx={10} fill={on ? c.text : full ? c.warn : c.accent} stroke={c.bg} strokeWidth={2} />
-              <text x={x} y={y + 4} fill={on ? c.bg : full ? "#1B1305" : c.onAccent} fontSize={12} fontWeight={700} fontFamily={FONT} textAnchor="middle">{label}</text>
-              <text x={x} y={y - 15} fill={c.text} fontSize={11} fontWeight={500} fontFamily={FONT} textAnchor="middle">{l.name}</text>
+              <title>{`${l.name}: ~${l.available} open`}</title>
+              {dot ? <circle cx={x} cy={y} r={4} fill={full ? c.warn : c.accent} stroke={c.bg} strokeWidth={1.5} /> : (
+                <>
+                  <rect x={x - w / 2} y={y - h / 2} width={w} height={h} rx={h / 2} fill={on ? c.text : full ? c.warn : c.accent} stroke={c.bg} strokeWidth={1.5} />
+                  <text x={x} y={y + (small ? 3 : 4)} fill={on ? c.bg : full ? "#1B1305" : c.onAccent} fontSize={small ? 9 : 12} fontWeight={700} fontFamily={FONT} textAnchor="middle">{label}</text>
+                  {named && <text x={x} y={y - h / 2 - 5} fill={c.text} fontSize={11} fontWeight={600} fontFamily={FONT} textAnchor="middle">{l.name}</text>}
+                </>
+              )}
             </g>
-          );
-        })}
+          ));
+        })()}
       </svg>
       {sel ? <LotSheet lot={sel} onClose={() => setSelId(null)} /> : (
         <View pointerEvents="none" style={{ position: "absolute", left: 8, right: 8, bottom: 8, flexDirection: "row", justifyContent: "space-between" }}>

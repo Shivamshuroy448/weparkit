@@ -15,7 +15,7 @@ function resolve(): string {
   const host = Constants.expoConfig?.hostUri?.split(":")[0];
   // With `expo start --tunnel` the host is an ngrok/exp.direct domain that only proxies Metro, not :8000.
   const isTunnel = !!host && /(\.exp\.direct|ngrok|\.ngrok-free\.app)$/.test(host);
-  if (isTunnel) console.warn("[IceStation] Expo tunnel detected: set EXPO_PUBLIC_API_URL to a public backend URL (e.g. a cloudflared/ngrok tunnel to :8000).");
+  if (isTunnel) console.warn("[WeParkit] Expo tunnel detected: set EXPO_PUBLIC_API_URL to a public backend URL (e.g. a cloudflared/ngrok tunnel to :8000).");
   if (host && !isTunnel && host !== "localhost" && host !== "127.0.0.1") return `http://${host}:8000`;
   if (Platform.OS === "android") return "http://10.0.2.2:8000";
   return "http://127.0.0.1:8000";

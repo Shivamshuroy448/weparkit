@@ -7,6 +7,7 @@ it follows the honesty rules: estimates are called estimates, nothing is "reserv
 from __future__ import annotations
 
 import hashlib
+import threading
 from collections import OrderedDict
 
 import httpx
@@ -20,6 +21,7 @@ MAX_AUDIO_BYTES = 5 * 1024 * 1024  # ~5 s voice clips are tens of KB
 MAX_CHARS = 600
 _CACHE_SIZE = 32
 _cache: OrderedDict[str, bytes] = OrderedDict()
+_cache_lock = threading.Lock()  # synthesize() runs on many request threads
 
 
 class VoiceError(RuntimeError):
@@ -102,9 +104,10 @@ def synthesize(text: str) -> bytes:
         raise VoiceError(503, "Voice briefings are off. Set ELEVENLABS_API_KEY in backend/.env.")
     text = text[:MAX_CHARS]
     key = hashlib.sha256(f"{settings.elevenlabs_voice_id}|{settings.elevenlabs_model}|{text}".encode()).hexdigest()
-    if key in _cache:
-        _cache.move_to_end(key)
-        return _cache[key]
+    with _cache_lock:
+        if key in _cache:
+            _cache.move_to_end(key)
+            return _cache[key]
     try:
         r = httpx.post(
             API_URL.format(voice_id=settings.elevenlabs_voice_id),
@@ -120,7 +123,8 @@ def synthesize(text: str) -> bytes:
     if r.status_code >= 400:
         detail = r.text[:160]
         raise VoiceError(502, f"ElevenLabs error {r.status_code}: {detail}")
-    _cache[key] = r.content
-    if len(_cache) > _CACHE_SIZE:
-        _cache.popitem(last=False)
+    with _cache_lock:
+        _cache[key] = r.content
+        while len(_cache) > _CACHE_SIZE:
+            _cache.popitem(last=False)
     return r.content

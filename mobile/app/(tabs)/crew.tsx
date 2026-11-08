@@ -1,4 +1,6 @@
 import { useFocusEffect } from "expo-router";
+import { LogOut } from "lucide-react-native";
+import { useAuth } from "../../src/auth";
 import { useCallback, useState } from "react";
 import { View } from "react-native";
 import { api, ago, type CrewUser } from "../../src/api";
@@ -15,6 +17,7 @@ const ACTIONS: Record<string, string> = {
 
 export default function Profile() {
   const { c, user, notifications, refresh, toast, setUser } = useStore();
+  const auth = useAuth();
   const [board, setBoard] = useState<CrewUser[]>([]);
   const [busy, setBusy] = useState<number | null>(null);
 
@@ -37,7 +40,7 @@ export default function Profile() {
   };
 
   return (
-    <Screen header={<Header title="Profile" subtitle={user ? `${user.handle} · anonymous demo profile` : undefined} />} onRefresh={load}>
+    <Screen header={<Header title="Profile" subtitle={auth.account ? `${user?.handle ?? auth.account.name} · ${auth.account.email}` : user?.handle} />} onRefresh={load}>
       {user && (
         <>
           <Metrics items={[
@@ -52,6 +55,15 @@ export default function Profile() {
           </Card>
         </>
       )}
+
+      <Section title="Account">
+        <Card padded={false}>
+          <List>
+            <ListRow title={auth.account?.email ?? "Not signed in"} subtitle={auth.account ? "Signed in" : undefined} />
+            <ListRow title={<T v="subheading" color={c.danger}>Log out</T>} left={<LogOut size={18} color={c.danger} />} onPress={auth.logout} />
+          </List>
+        </Card>
+      </Section>
 
       <Section title="Help requests">
         {requests.length === 0 ? <Empty art={<Alien size={52} />} title="No open requests">If your car is stuck, request help from the Plan tab.</Empty> : (
