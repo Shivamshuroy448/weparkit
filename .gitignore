@@ -1,10 +1,40 @@
+# Environment & Secrets (NEVER COMMIT)
+.env
+.env.*
+!.env.example
+*.env
+backend/.env
+mobile/.env
+*.secret
+*.token
+tokens.json
+.secrets/
+
+# Credentials, Keys & Certificates
+*.key
+*.pem
+*.cert
+*.crt
+*.p12
+*.pfx
+*.pkcs12
+*id_rsa*
+credentials.json
+service-account*.json
+client_secret*.json
+google-services.json
+GoogleService-Info.plist
+
 # Python
 __pycache__/
 *.pyc
+*.pyo
 .venv/
 venv/
 .pytest_cache/
-backend/.env
+*.pt
+
+# Database & Uploads
 backend/data/*.db
 backend/data/*.db-wal
 backend/data/*.db-shm
@@ -13,16 +43,15 @@ backend/data/uploads/*
 backend/data/satellite/*
 !backend/data/uploads/.gitkeep
 !backend/data/satellite/.gitkeep
-*.pt
 
 # Expo / Node
 mobile/node_modules/
 mobile/.expo/
 mobile/dist/
 mobile/web-build/
-mobile/.env
 mobile/expo-env.d.ts
 mobile/ios/
 mobile/android/
 npm-debug.*
+yarn-error.log
 .DS_Store

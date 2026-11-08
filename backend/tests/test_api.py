@@ -1,6 +1,9 @@
 def test_health(client):
     r = client.get("/api/health")
     assert r.status_code == 200 and r.json()["status"] == "ok"
+    assert r.headers.get("X-Content-Type-Options") == "nosniff"
+    assert r.headers.get("X-Frame-Options") == "DENY"
+    assert r.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
 
 
 def test_lots_and_detail(client):

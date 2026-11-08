@@ -48,6 +48,22 @@ MAX_BODY_BYTES = 20 * 1024 * 1024   # photo uploads are capped at 15 MB in the p
 THREAD_LIMIT = 100                  # sync endpoints that wait on ElevenLabs/Gemini must not starve /api/health
 STARTED_AT = time.time()
 
+# ------------------------------------------------------------------ security layers
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "X-XSS-Protection": "1; mode=block",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(self), microphone=(self), geolocation=(self)",
+    "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+}
+
+_ip_requests: dict[str, list[float]] = {}
+RATE_WINDOW_S = 60.0
+RATE_MAX_GENERAL = 180      # max requests/min per IP
+RATE_MAX_AUTH = 30          # max auth attempts/min per IP
+
+
 
 async def expiry_loop() -> None:
     """Every 30 s: expire hazards and tell clients when crew parking reports age out. Never dies."""
@@ -123,24 +139,52 @@ app = FastAPI(title="WeParkit API", version="1.1.0", lifespan=lifespan,
 
 @app.middleware("http")
 async def guard(request: Request, call_next):
-    """Request id, timing, body-size limit, and a last-resort catch so nothing escapes as a dropped connection."""
+    """Security layers: OWASP headers, body-size enforcement, IP rate limiting, and exception containment."""
     rid = request.headers.get("x-request-id") or uuid.uuid4().hex[:12]
     request.state.request_id = rid
+
+    # 1. Body size guard (prevents memory exhaustion attacks)
     length = request.headers.get("content-length")
     if length and length.isdigit() and int(length) > MAX_BODY_BYTES:
         return JSONResponse(status_code=413, content={"detail": "Upload too large (max 20 MB).", "request_id": rid},
-                            headers={"x-request-id": rid})
+                            headers={"x-request-id": rid, **SECURITY_HEADERS})
+
+    # 2. Rate limiting guard (per IP sliding window; skips test client and internal health checks)
+    client_ip = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+    if not client_ip and request.client:
+        client_ip = request.client.host
+
+    path = request.url.path
+    if client_ip and client_ip not in ("testclient", "127.0.0.1", "localhost") and not path.startswith(("/api/live", "/api/health")):
+        now = time.time()
+        is_auth = path.startswith("/api/auth/")
+        max_reqs = RATE_MAX_AUTH if is_auth else RATE_MAX_GENERAL
+        recent = [t for t in _ip_requests.get(client_ip, []) if now - t < RATE_WINDOW_S]
+        if len(recent) >= max_reqs:
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many requests. Please slow down.", "request_id": rid},
+                headers={"x-request-id": rid, "Retry-After": "30", **SECURITY_HEADERS}
+            )
+        recent.append(now)
+        _ip_requests[client_ip] = recent
+
+    # 3. Request timing & safe invocation
     t0 = time.perf_counter()
     try:
         response = await call_next(request)
     except Exception:
         log.exception("unhandled error rid=%s %s %s", rid, request.method, request.url.path)
         return JSONResponse(status_code=500, content={"detail": "Something went wrong on the server. Please try again.",
-                                                      "request_id": rid}, headers={"x-request-id": rid})
+                                                      "request_id": rid}, headers={"x-request-id": rid, **SECURITY_HEADERS})
     ms = (time.perf_counter() - t0) * 1000
     if ms > 3000:
         log.warning("slow request rid=%s %s %s %.0f ms", rid, request.method, request.url.path, ms)
+
+    # 4. Inject OWASP security headers & request ID
     response.headers["x-request-id"] = rid
+    for k, v in SECURITY_HEADERS.items():
+        response.headers[k] = v
     return response
 
 
