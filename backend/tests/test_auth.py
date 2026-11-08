@@ -115,3 +115,21 @@ def test_auth_required_mode(client, monkeypatch):
     monkeypatch.setattr(auth.settings, "auth_required", True)
     u = client.post("/api/crew/me").json()["id"]
     assert client.post("/api/parking/checkin", json={"user_id": u, "lot_id": 1}).status_code == 401
+
+
+def test_ub_single_sign_on(client):
+    # Test with UBITName
+    r = client.post("/api/auth/ub-sso", json={"ubit_name": "sroy"}).json()
+    assert r["token"] and r["account"]["email"] == "sroy@buffalo.edu"
+    assert r["account"]["email_verified"] is True
+    assert r["sso"]["provider"] == "University at Buffalo (Shibboleth CAS)"
+    assert r["sso"]["ubit_name"] == "sroy"
+    assert r["sso"]["permit_tier"] == "Commuter"
+
+    # Test with full @buffalo.edu address
+    r2 = client.post("/api/auth/ub-sso", json={"ubit_name": "victor.bull@buffalo.edu"}).json()
+    assert r2["token"] and r2["account"]["email"] == "victor.bull@buffalo.edu"
+
+    # Test invalid UBITName
+    bad = client.post("/api/auth/ub-sso", json={"ubit_name": "x"})
+    assert bad.status_code == 422

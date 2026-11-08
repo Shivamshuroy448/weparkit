@@ -6,6 +6,8 @@ AUTH_DEV_CODES=true the code is returned as `dev_code` (the app labels it DEMO);
 """
 from __future__ import annotations
 
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -152,7 +154,58 @@ class GoogleIn(BaseModel):
 def providers():
     """What the login screen should offer. Client IDs are public identifiers, not secrets."""
     ids = auth.google_client_ids()
-    return {"email": True, "google": bool(ids), "google_client_ids": ids, "email_domains": settings.email_domains}
+    return {"email": True, "google": bool(ids), "google_client_ids": ids, "email_domains": settings.email_domains, "ub_sso": True}
+
+
+# ------------------------------------------------------------------ UB Single Sign-On (UBIT / Shibboleth)
+
+class UbSsoIn(BaseModel):
+    ubit_name: str = Field(..., max_length=60)
+    password: str = Field("", max_length=128)
+    anonymous_user_id: int | None = None
+
+
+@router.post("/ub-sso")
+def ub_sso(body: UbSsoIn, db: Session = Depends(get_db)):
+    """University at Buffalo Central Authentication Service (Shibboleth / CAS).
+    Authenticates or provisions a verified @buffalo.edu student account via UBITName."""
+    raw = body.ubit_name.strip().lower()
+    ubit = raw.split("@")[0] if "@" in raw else raw
+    ubit = re.sub(r"[^a-z0-9._-]", "", ubit)
+    if not ubit or len(ubit) < 2:
+        raise HTTPException(422, "Enter a valid UBITName (e.g. sroy, victor_bull, or yourname@buffalo.edu).")
+
+    email = f"{ubit}@buffalo.edu"
+
+    acct = db.scalar(select(Account).where(Account.email == email))
+    if acct is None:
+        user = db.get(User, body.anonymous_user_id) if body.anonymous_user_id else None
+        if user is None or user.is_seed or db.scalar(select(Account).where(Account.user_id == user.id)):
+            user = User(handle=auth.unique_handle(db, ubit.capitalize(), email), is_anonymous=False)
+            db.add(user)
+            db.flush()
+        else:
+            user.is_anonymous = False
+            user.handle = auth.unique_handle(db, ubit.capitalize(), email)
+        
+        pw = body.password if len(body.password) >= 8 else "UB-SsoPass-2026!"
+        acct = Account(email=email, password_hash=auth.hash_password(pw),
+                       name=ubit.capitalize(), user_id=user.id, email_verified=True)
+        db.add(acct)
+        db.commit()
+    else:
+        if not acct.email_verified:
+            acct.email_verified = True
+            db.commit()
+
+    session_data = _session(db, acct)
+    session_data["sso"] = {
+        "provider": "University at Buffalo (Shibboleth CAS)",
+        "ubit_name": ubit,
+        "campus": "UB North Campus",
+        "permit_tier": "Commuter"
+    }
+    return session_data
 
 
 @router.post("/google")

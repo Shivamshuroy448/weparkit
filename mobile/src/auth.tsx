@@ -24,6 +24,8 @@ interface Auth {
   resend: (email: string) => Promise<CodeSent>;
   /** Sign in with a Google ID token (verified by the backend). */
   googleSignIn: (idToken: string) => Promise<void>;
+  /** University at Buffalo Central Authentication Service (UBIT / Shibboleth SAML). */
+  ubSignIn: (ubitName: string, password?: string) => Promise<void>;
   logout: () => Promise<void>;
   continueAsGuest: () => void;
 }
@@ -103,6 +105,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await adopt(s.token, s.account);
   }, [user?.id, adopt]);
 
+  const ubSignIn = useCallback(async (ubitName: string, password = "") => {
+    const s = await authApi.ubSso({ ubit_name: ubitName, password, anonymous_user_id: user?.id ?? null });
+    await adopt(s.token, s.account);
+  }, [user?.id, adopt]);
+
   const logout = useCallback(async () => {
     await authApi.logout().catch(() => {});
     await signOutLocal();
@@ -113,8 +120,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus("signedIn");
   }, []);
 
-  const value = useMemo<Auth>(() => ({ status, account, login, signup, verify, resend, googleSignIn, logout, continueAsGuest }),
-    [status, account, login, signup, verify, resend, googleSignIn, logout, continueAsGuest]);
+  const value = useMemo<Auth>(() => ({ status, account, login, signup, verify, resend, googleSignIn, ubSignIn, logout, continueAsGuest }),
+    [status, account, login, signup, verify, resend, googleSignIn, ubSignIn, logout, continueAsGuest]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

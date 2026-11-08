@@ -189,9 +189,11 @@ export const authApi = {
   verify: (email: string, code: string) => req<AuthSession>("/api/auth/verify", json({ email, code })),
   resend: (email: string) => req<CodeSent>("/api/auth/resend", json({ email })),
   login: (email: string, password: string) => req<AuthSession>("/api/auth/login", json({ email, password })),
+  ubSso: (b: { ubit_name: string; password?: string; anonymous_user_id?: number | null }) =>
+    req<AuthSession & { sso?: { provider: string; ubit_name: string; permit_tier: string } }>("/api/auth/ub-sso", json(b)),
   logout: () => req<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
   me: () => req<{ account: Account }>("/api/auth/me"),
-  providers: () => req<{ email: boolean; google: boolean; google_client_ids: string[]; email_domains: string[] }>("/api/auth/providers"),
+  providers: () => req<{ email: boolean; google: boolean; google_client_ids: string[]; email_domains: string[]; ub_sso?: boolean }>("/api/auth/providers"),
   google: (id_token: string, anonymous_user_id?: number | null) => req<AuthSession>("/api/auth/google", json({ id_token, anonymous_user_id })),
 };
 
