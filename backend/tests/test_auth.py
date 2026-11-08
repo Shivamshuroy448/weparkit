@@ -117,36 +117,45 @@ def test_auth_required_mode(client, monkeypatch):
     assert client.post("/api/parking/checkin", json={"user_id": u, "lot_id": 1}).status_code == 401
 
 
-def test_ub_single_sign_on(client):
+def test_ub_single_sign_on(client, monkeypatch):
+    from app.routers import auth as auth_router
+
+    # Mock directory lookup for test account
+    monkeypatch.setattr(auth_router, "lookup_ub_directory", lambda u: {"name": "Test Student", "role": "Student"} if u == "teststudent" else None)
+
     # Missing/short password rejected
-    assert client.post("/api/auth/ub-sso", json={"ubit_name": "sroy"}).status_code == 422
-    assert client.post("/api/auth/ub-sso", json={"ubit_name": "sroy", "password": "123"}).status_code == 422
+    assert client.post("/api/auth/ub-sso", json={"ubit_name": "teststudent"}).status_code == 422
+    assert client.post("/api/auth/ub-sso", json={"ubit_name": "teststudent", "password": "123"}).status_code == 422
 
-    # New student signup with valid password
-    r = client.post("/api/auth/ub-sso", json={"ubit_name": "sroy", "password": "snowday-2026"}).json()
-    assert r["token"] and r["account"]["email"] == "sroy@buffalo.edu"
-    assert r["account"]["email_verified"] is True
-    assert r["sso"]["provider"] == "University at Buffalo (Shibboleth CAS)"
-    assert r["sso"]["ubit_name"] == "sroy"
-    assert r["sso"]["permit_tier"] == "Commuter"
+    # Unrecognized fake UBITName that does not exist in UB directory is rejected (NOT signed up)
+    fake = client.post("/api/auth/ub-sso", json={"ubit_name": "victor_bull", "password": "snowday-2026"})
+    assert fake.status_code == 401
+    assert "not found in the official University at Buffalo directory" in fake.json()["detail"]
 
-    # Existing student with correct password succeeds
-    ok = client.post("/api/auth/ub-sso", json={"ubit_name": "sroy", "password": "snowday-2026"})
+    # Pre-registered student in database with correct password succeeds
+    from app.database import SessionLocal
+    from app.models import Account, User
+    from app.services import auth as auth_service
+    with SessionLocal() as db:
+        user = User(handle="TestStudent", is_anonymous=False)
+        db.add(user)
+        db.flush()
+        acct = Account(email="teststudent@buffalo.edu", password_hash=auth_service.hash_password("snowday-2026"),
+                       name="Test Student", user_id=user.id, email_verified=True)
+        db.add(acct)
+        db.commit()
+
+    ok = client.post("/api/auth/ub-sso", json={"ubit_name": "teststudent", "password": "snowday-2026"})
     assert ok.status_code == 200
+    r = ok.json()
+    assert r["token"] and r["account"]["email"] == "teststudent@buffalo.edu"
+    assert r["sso"]["provider"] == "University at Buffalo (Shibboleth CAS)"
+    assert r["sso"]["ubit_name"] == "teststudent"
 
     # Existing student with wrong random password rejected with 401
-    bad_pw = client.post("/api/auth/ub-sso", json={"ubit_name": "sroy", "password": "wrongrandompassword"})
+    bad_pw = client.post("/api/auth/ub-sso", json={"ubit_name": "teststudent", "password": "wrongrandompassword"})
     assert bad_pw.status_code == 401
     assert "Invalid UBITName or password" in bad_pw.json()["detail"]
-
-    # Full email address format works
-    r2 = client.post("/api/auth/ub-sso", json={"ubit_name": "victor.bull@buffalo.edu", "password": "snowday-2026"}).json()
-    assert r2["token"] and r2["account"]["email"] == "victor.bull@buffalo.edu"
-
-    # Random fake UBITName that does not exist in UB directory is rejected (NOT signed up)
-    fake = client.post("/api/auth/ub-sso", json={"ubit_name": "randomfakestudent999", "password": "snowday-2026"})
-    assert fake.status_code == 401
-    assert "not recognized in the University at Buffalo directory" in fake.json()["detail"]
 
     # Invalid UBITName format rejected
     assert client.post("/api/auth/ub-sso", json={"ubit_name": "x", "password": "snowday-2026"}).status_code == 422

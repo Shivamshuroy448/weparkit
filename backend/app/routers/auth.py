@@ -167,18 +167,8 @@ class UbSsoIn(BaseModel):
 
 
 def lookup_ub_directory(ubit: str) -> dict | None:
-    """Verifies whether a UBITName exists in the official University at Buffalo LDAP directory (Whitepages)
-    or is a recognized campus demonstration account."""
-    demo_accounts = {
-        "sroy": {"name": "Sroy", "role": "Commuter"},
-        "victor_bull": {"name": "Victor E. Bull", "role": "Student"},
-        "victor.bull": {"name": "Victor E. Bull", "role": "Student"},
-        "capen_scholar": {"name": "Capen Scholar", "role": "Faculty / Staff"},
-    }
-    if ubit in demo_accounts:
-        return demo_accounts[ubit]
-
-    # Live LDAP query against official University at Buffalo directory (Whitepages)
+    """Verifies whether a UBITName exists in the official University at Buffalo LDAP directory (Whitepages).
+    Queries ldap://ldap.buffalo.edu directly. Rejects all fake or unverified names."""
     try:
         res = subprocess.run(
             [
@@ -210,48 +200,40 @@ def ub_sso(body: UbSsoIn, db: Session = Depends(get_db)):
     ubit = raw.split("@")[0] if "@" in raw else raw
     ubit = re.sub(r"[^a-z0-9._-]", "", ubit)
     if not ubit or len(ubit) < 2 or not re.fullmatch(r"[a-z0-9._-]{2,20}", ubit):
-        raise HTTPException(422, "Enter a valid UBITName (e.g. sroy, victor_bull, or yourname@buffalo.edu).")
+        raise HTTPException(422, "Enter a valid UBITName (e.g. svelamak or yourname@buffalo.edu).")
 
     if not body.password or len(body.password) < 6:
         raise HTTPException(422, "Enter your UBIT password (minimum 6 characters).")
 
+    # Step 1: Verify identity exists in the official University at Buffalo directory
+    ub_info = lookup_ub_directory(ubit)
+    if ub_info is None:
+        raise HTTPException(401, f"UBITName '{ubit}' was not found in the official University at Buffalo directory. Fake or unrecognized campus names are rejected.")
+
     email = f"{ubit}@buffalo.edu"
     auth.check_not_locked(email)
 
-    ub_info = lookup_ub_directory(ubit)
+    # Step 2: Strictly verify credentials for registered student accounts
     acct = db.scalar(select(Account).where(Account.email == email))
+    if acct is None:
+        raise HTTPException(401, f"UBIT account '{ubit}' is not registered on WeParkit. Please register first.")
 
-    if acct is not None:
-        # Existing account: strictly verify the password against the stored hash
-        if not auth.verify_password(body.password, acct.password_hash):
-            auth.record_failure(email)
-            raise HTTPException(401, "Invalid UBITName or password. Enter your correct UBIT credentials.")
-        auth.clear_failures(email)
-        if not acct.email_verified:
-            acct.email_verified = True
-            db.commit()
-    else:
-        # First-time registration with this UBITName: must be a verified identity in UB directory
-        if ub_info is None:
-            raise HTTPException(401, f"UBITName '{ubit}' is not recognized in the University at Buffalo directory. Please enter your valid UBITName.")
-
-        if len(body.password) < 8:
-            raise HTTPException(422, "New UBIT password must be at least 8 characters (UB IT policy).")
-
-        user = db.get(User, body.anonymous_user_id) if body.anonymous_user_id else None
-        student_name = ub_info.get("name") or ubit.capitalize()
-        if user is None or user.is_seed or db.scalar(select(Account).where(Account.user_id == user.id)):
-            user = User(handle=auth.unique_handle(db, student_name, email), is_anonymous=False)
-            db.add(user)
-            db.flush()
-        else:
-            user.is_anonymous = False
-            user.handle = auth.unique_handle(db, student_name, email)
-
-        acct = Account(email=email, password_hash=auth.hash_password(body.password),
-                       name=student_name, user_id=user.id, email_verified=True)
-        db.add(acct)
+    if not auth.verify_password(body.password, acct.password_hash):
+        auth.record_failure(email)
+        raise HTTPException(401, "Invalid UBITName or password. Enter your correct UBIT credentials.")
+    auth.clear_failures(email)
+    if not acct.email_verified:
+        acct.email_verified = True
         db.commit()
+
+    session_data = _session(db, acct)
+    session_data["sso"] = {
+        "provider": "University at Buffalo (Shibboleth CAS)",
+        "ubit_name": ubit,
+        "campus": "UB North Campus",
+        "permit_tier": "Commuter"
+    }
+    return session_data
 
     session_data = _session(db, acct)
     session_data["sso"] = {

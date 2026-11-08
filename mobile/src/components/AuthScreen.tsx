@@ -12,11 +12,7 @@ import { Alien } from "./SpaceArt";
 import Starfield from "./Starfield";
 import { Banner, Card, Input, T, row } from "./ui";
 
-const UB_PRESETS = [
-  { label: "sroy", desc: "Commuter" },
-  { label: "victor_bull", desc: "Student" },
-  { label: "capen_scholar", desc: "Resident" },
-];
+
 
 /** University at Buffalo Central Authentication Service (UBIT / Shibboleth CAS). */
 export default function AuthScreen() {
@@ -180,40 +176,7 @@ export default function AuthScreen() {
               </T>
             </View>
 
-            {/* Quick Preset Buttons for Instant Demo Testing */}
-            <View style={{ gap: 6 }}>
-              <T v="caption" color={c.textFaint} style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                Quick Student Presets (Tap to fill):
-              </T>
-              <View style={[row.gap, { flexWrap: "wrap", gap: space.xs }]}>
-                {UB_PRESETS.map((p) => (
-                  <Pressable
-                    key={p.label}
-                    onPress={() => {
-                      setUbitName(p.label);
-                      setUbitPassword("password123");
-                      setUbError(null);
-                    }}
-                    style={{
-                      backgroundColor: ubitName === p.label ? "rgba(34, 197, 94, 0.18)" : c.surfaceAlt,
-                      borderColor: ubitName === p.label ? "#22C55E" : c.border,
-                      borderWidth: 1,
-                      paddingHorizontal: 8,
-                      paddingVertical: 4,
-                      borderRadius: 6,
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 4,
-                    }}
-                  >
-                    <Text style={{ color: ubitName === p.label ? "#22C55E" : c.text, fontSize: 11, fontWeight: "600" }}>
-                      {p.label}
-                    </Text>
-                    <Text style={{ color: c.textFaint, fontSize: 9.5 }}>({p.desc})</Text>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
+
 
             {ubError && <Banner tone="danger">{ubError}</Banner>}
 
