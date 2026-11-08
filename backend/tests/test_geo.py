@@ -27,8 +27,9 @@ def test_every_lot_pin_is_inside_its_outline():
 
 
 def test_osm_outlines_are_labelled():
-    assert OUTLINE_SOURCE["jarvis-a"].startswith("osm:")
-    assert OUTLINE_SOURCE["stadium"] == "approximate_box"
+    # Every lot now has a real OpenStreetMap outline (scripts/import_osm_lots.py).
+    assert all(src.startswith("osm:") for src in OUTLINE_SOURCE.values())
+    assert OUTLINE_SOURCE["jarvis-a"] == "osm:way/639790337"  # Jarvis A, not Jarvis B (639790336)
 
 
 def test_near_but_outside_matches_with_lower_confidence():

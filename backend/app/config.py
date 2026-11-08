@@ -11,7 +11,7 @@ DATA_DIR = BASE_DIR / "data"
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=str(BASE_DIR / ".env"), extra="ignore")
 
-    app_name: str = "IceStation UB"
+    app_name: str = "WeParkit"
     database_url: str = f"sqlite:///{(DATA_DIR / 'icestation.db').as_posix()}"
     cors_origins: str = "http://localhost:8081,http://127.0.0.1:8081"  # Expo web; native apps ignore CORS
     # Expo web opened from another device on the LAN (e.g. http://192.168.1.20:8081). Private ranges only.
@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     buffalo_px_x: int = 230
     buffalo_px_y: int = 330
     km_per_px: float = 2.0
-    nws_user_agent: str = "IceStationUB/1.0 (hackathon prototype; contact@example.com)"
+    nws_user_agent: str = "WeParkit/1.0 (hackathon prototype; contact@example.com)"
     nws_point_lat: float = 43.0008
     nws_point_lon: float = -78.7890
     nws_station: str = "KBUF"
@@ -52,6 +52,27 @@ class Settings(BaseSettings):
     elevenlabs_voice_id: str = "JBFqnCBsd6RMkjVDRZzb"
     elevenlabs_model: str = "eleven_flash_v2_5"
     elevenlabs_stt_model: str = "scribe_v1"   # speech-to-text for the voice co-pilot
+
+    # --- Accounts (email + password login) ----------------------------------
+    # Comma-separated domains allowed to sign up. Default: UB and Gmail accounts.
+    auth_email_domains: str = "buffalo.edu,gmail.com"
+    # Email verification codes. Off = simple signup (email + password -> signed in immediately).
+    auth_verify_email: bool = False
+    # Google sign-in: comma-separated OAuth client IDs (web / Android / iOS) whose ID tokens we accept.
+    # Empty = the "Continue with Google" button is hidden. Client IDs are public; no secret is needed.
+    google_client_ids: str = ""
+    auth_token_days: int = 30
+    # When true, endpoints that act for a student (check-in/out, profile) require a login token.
+    # Off by default so the demo and existing clients keep working; the app itself always logs in.
+    auth_required: bool = False
+    # Verification codes are emailed when SMTP is configured. Without SMTP, dev mode returns the code
+    # in the API response (and the app labels it DEMO) so signup still works at a hackathon table.
+    auth_dev_codes: bool = True
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = "WeParkit <no-reply@weparkit.local>"
 
     # --- Decision thresholds -----------------------------------------------
     ice_arrival_threshold_min: int = 60
@@ -75,6 +96,10 @@ class Settings(BaseSettings):
     # Optional HH:MM. When set, the occupancy model and recommendations run as if it were
     # this time of day (handy for demos at 2 AM). Shown in the UI as SIMULATED CLOCK.
     sim_clock: str = ""
+
+    @property
+    def email_domains(self) -> list[str]:
+        return [d.strip().lower() for d in self.auth_email_domains.split(",") if d.strip()]
 
     @property
     def cors_list(self) -> list[str]:

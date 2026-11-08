@@ -102,6 +102,54 @@ class ParkingReport(TimestampMixin, Base):
         return v
 
 
+class Account(TimestampMixin, Base):
+    """A signed-up student (UB email). Linked 1:1 to the User that holds points, sessions and history."""
+    __tablename__ = "accounts"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(120), unique=True, index=True)   # lowercase, @buffalo.edu
+    password_hash: Mapped[str] = mapped_column(String(200))
+    name: Mapped[str] = mapped_column(String(80), default="")
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True)
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class AuthToken(TimestampMixin, Base):
+    """Login session. Only the SHA-256 of the bearer token is stored."""
+    __tablename__ = "auth_tokens"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id", ondelete="CASCADE"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class EmailCode(TimestampMixin, Base):
+    """One-time email verification code (hashed), 15 min lifetime, limited attempts."""
+    __tablename__ = "email_codes"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id", ondelete="CASCADE"), index=True)
+    code_hash: Mapped[str] = mapped_column(String(64))
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    used: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class ParkingSession(TimestampMixin, Base):
+    """A student's car parked in a lot: opened by "I'm parked" or GPS auto-detect, closed on leaving.
+    Active sessions adjust the lot's occupied count between crew reports. Expire after 12 h."""
+    __tablename__ = "parking_sessions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    lot_id: Mapped[int] = mapped_column(ForeignKey("parking_lots.id", ondelete="CASCADE"), index=True)
+    source: Mapped[str] = mapped_column(String(20), default="manual")        # manual | auto
+    car_lat: Mapped[float | None] = mapped_column(Float, nullable=True)      # where the car is, for "Find my car"
+    car_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    end_source: Mapped[str | None] = mapped_column(String(20), nullable=True)  # manual | auto | replaced
+    expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+
+
 class VehicleDetection(TimestampMixin, Base):
     """Raw output of one image analysis. Only privacy-blurred images are ever stored."""
     __tablename__ = "vehicle_detections"

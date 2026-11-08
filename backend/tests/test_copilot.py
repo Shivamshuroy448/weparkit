@@ -75,3 +75,61 @@ def test_alerts(client):
     t = client.get("/api/voice/alert", params={"kind": "lot_full", "lot_id": 2, "text_only": True}).json()["text"]
     assert t.startswith("Hochstetter B is filling up") and "Try" in t
     assert client.get("/api/voice/alert", params={"kind": "bogus"}).status_code == 422
+
+
+def test_conversation_follow_ups_and_end(client):
+    a = client.post("/api/voice/ask", data={"text": "Is Jarvis B full?"}).json()
+    assert a["intent"] == "lot_status" and a["lot"]["slug"] == "jarvis-b" and a["conversation_id"]
+    cid = a["conversation_id"]
+    b = client.post("/api/voice/ask", data={"text": "When should I leave for it?", "conversation_id": cid}).json()
+    assert b["intent"] == "leave_time" and b["conversation_id"] == cid and "Jarvis B" in b["answer"]
+    c = client.post("/api/voice/ask", data={"text": "is it full", "conversation_id": cid}).json()
+    assert c["intent"] == "lot_status" and c["lot"]["slug"] == "jarvis-b"
+    d = client.post("/api/voice/ask", data={"text": "thanks", "conversation_id": cid}).json()
+    assert d["end_conversation"] is True and d["intent"] == "end"
+    # a fresh conversation has no memory of the lot
+    e = client.post("/api/voice/ask", data={"text": "is it full"}).json()
+    assert e["intent"] == "help" and e["conversation_id"] != cid
+
+
+def test_free_form_question_goes_to_gemini_with_live_context(client, monkeypatch):
+    from app.services import llm
+    seen = {}
+
+    def fake_answer(question, context, history):
+        seen.update(question=question, context=context, history=history)
+        return "About 40 spaces are open at Slee A right now, by our estimate."
+
+    monkeypatch.setattr(llm, "answer", fake_answer)
+    first = client.post("/api/voice/ask", data={"text": "Is Slee A full?"}).json()
+    r = client.post("/api/voice/ask", data={"text": "Is it worth driving in today or should I take the bus?",
+                                            "conversation_id": first["conversation_id"]}).json()
+    assert r["answered_by"] == "gemini" and r["answer"].startswith("About 40")
+    assert "UB North Campus has" in seen["context"] and "Most open lots" in seen["context"]
+    assert seen["history"] and seen["history"][0][0] == "Is Slee A full?"
+
+
+def test_free_form_without_gemini_falls_back_to_help(client):
+    r = client.post("/api/voice/ask", data={"text": "tell me a joke"}).json()
+    assert r["intent"] == "help" and r["answered_by"] == "rules" and "You can ask" in r["answer"]
+
+
+def test_every_ub_lot_is_recognised_by_name():
+    from app.campus import LOTS
+    lots = [(l["slug"], l["name"]) for l in LOTS]
+    for slug, name in lots:
+        assert copilot.find_lot(f"is {name} full", lots) == slug, name
+
+
+def test_concurrent_conversations_are_thread_safe(client):
+    """Many phones talking at once: the shared conversation/answer stores must not race."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    def talk(i):
+        a = client.post("/api/voice/ask", data={"text": "Is Jarvis A full?"}).json()
+        b = client.post("/api/voice/ask", data={"text": "is it full", "conversation_id": a["conversation_id"]}).json()
+        return a["conversation_id"] == b["conversation_id"] and b["lot"]["slug"] == "jarvis-a" and \
+            client.get(b["speech_path"], params={"text_only": True}).status_code == 200
+
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        assert all(pool.map(talk, range(48)))

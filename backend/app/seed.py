@@ -14,16 +14,18 @@ def create_all() -> None:
 
 
 def seed(db: Session) -> None:
-    if not db.query(ParkingLot).count():
-        for cfg in LOTS:
+    # Lot definitions are configuration (app/ub_lots.json via campus.py), not user data: insert lots an
+    # existing DB doesn't have yet and keep every configured field in sync. Reports, scans and sessions
+    # reference lots by id, which never changes for an existing slug.
+    existing = {lot.slug: lot for lot in db.query(ParkingLot)}
+    for cfg in LOTS:
+        lot = existing.get(cfg["slug"])
+        if lot is None:
             db.add(ParkingLot(**cfg))
-    else:
-        # Geometry is configuration, not user data: keep existing DBs in sync with campus.py outlines.
-        by_slug = {cfg["slug"]: cfg for cfg in LOTS}
-        for lot in db.query(ParkingLot):
-            cfg = by_slug.get(lot.slug)
-            if cfg and (lot.polygon != cfg["polygon"] or (lot.lat, lot.lng) != (cfg["lat"], cfg["lng"])):
-                lot.lat, lot.lng, lot.polygon = cfg["lat"], cfg["lng"], cfg["polygon"]
+            continue
+        for key, value in cfg.items():
+            if getattr(lot, key) != value:
+                setattr(lot, key, value)
     if not db.query(User).filter(User.is_seed.is_(True)).count():
         for handle, pts, reports, verified in DEMO_USERS:
             db.add(User(handle=handle, is_anonymous=False, is_seed=True, points=pts,

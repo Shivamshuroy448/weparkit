@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -11,6 +11,7 @@ from ..database import get_db
 from ..models import HAZARD_CATEGORIES, CrewContribution, HazardReport, HazardVote, Notification, ParkingLot, User
 from ..schemas import AssistIn, HazardClearIn, HazardVoteIn, ProfileIn
 from ..services import hazards as hz
+from ..services.auth import authorize_user
 from ..services.crew import award, get_or_create_user, notify, serialize_notification, serialize_user
 from ..services.lot_state import get_state, is_ice
 from ..services.realtime import hub
@@ -164,8 +165,15 @@ def leaderboard(limit: int = Query(10, ge=1, le=50), db: Session = Depends(get_d
 
 
 @crew_router.post("/me")
-def me(user_id: int | None = Query(None), body: ProfileIn | None = None, db: Session = Depends(get_db)):
-    """Returns (creating if needed) the anonymous demo user. Optional body updates preferences."""
+def me(request: Request, user_id: int | None = Query(None), body: ProfileIn | None = None, db: Session = Depends(get_db)):
+    """Returns (creating if needed) the anonymous demo user, or the logged-in student's profile when a
+    Bearer token is sent. Optional body updates preferences."""
+    from ..services.auth import account_for_token, bearer
+    acct = account_for_token(db, bearer(request))
+    if acct:
+        user_id = acct.user_id
+    elif user_id is not None and body:
+        authorize_user(request, db, user_id)
     u = get_or_create_user(db, user_id)
     if body:
         if body.needs_accessible_routes is not None:

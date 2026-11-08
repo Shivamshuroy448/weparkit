@@ -20,17 +20,16 @@ from __future__ import annotations
 import logging
 import math
 import re
-import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from pathlib import Path
 
 import cv2
 import httpx
 import numpy as np
 
 from ..config import DATA_DIR, get_settings
+from .swr import SWRCache
 from ..timeutil import utcnow
 
 log = logging.getLogger(__name__)
@@ -221,7 +220,6 @@ def save_image(img: np.ndarray, tag: str) -> str:
 
 # ----------------------------------------------------------------------------- live source
 
-_live_cache: dict = {"t": 0.0, "listing": None, "error": None}
 _FILE_RE = re.compile(r"(\d{11})_GOES19-ABI-ne-13-(\d+x\d+)\.jpg")
 
 
@@ -234,18 +232,23 @@ def live_listing(force: bool = False) -> tuple[list[tuple[datetime, str]] | None
     """Returns ([(acquired_at, url)...] newest last, error)."""
     if not settings.satellite_live_enabled:
         return None, "Live satellite retrieval disabled (SATELLITE_LIVE_ENABLED=false)"
-    if not force and time.time() - _live_cache["t"] < 300:
-        return _live_cache["listing"], _live_cache["error"]
+    # Served from a stale-while-revalidate cache: request handlers never wait on NOAA once warm.
+    return listing_cache.get(force=force) or (None, "NOAA listing not loaded yet")
+
+
+def _fetch_listing() -> tuple[list[tuple[datetime, str]] | None, str | None]:
     try:
         r = httpx.get(settings.goes_sector_url, timeout=settings.external_timeout_s,
                       headers={"User-Agent": settings.nws_user_agent})
         r.raise_for_status()
         found = {(m.group(1)) for m in _FILE_RE.finditer(r.text) if m.group(2) == settings.goes_image_size}
         listing = sorted((_parse_stamp(s), f"{settings.goes_sector_url}{s}_GOES19-ABI-ne-13-{settings.goes_image_size}.jpg") for s in found)
-        _live_cache.update(t=time.time(), listing=listing or None, error=None if listing else "No frames listed")
+        return (listing or None), (None if listing else "No frames listed")
     except Exception as exc:
-        _live_cache.update(t=time.time(), listing=None, error=f"NOAA STAR CDN unreachable: {type(exc).__name__}")
-    return _live_cache["listing"], _live_cache["error"]
+        return None, f"NOAA STAR CDN unreachable: {type(exc).__name__}"
+
+
+listing_cache = SWRCache("goes-listing", _fetch_listing, ttl_s=300)
 
 
 def fetch_live_frames(n: int = 2) -> tuple[list[Frame], str | None]:

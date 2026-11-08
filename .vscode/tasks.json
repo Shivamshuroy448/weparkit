@@ -13,8 +13,8 @@
       "label": "Backend: run",
       "type": "shell",
       "options": { "cwd": "${workspaceFolder}/backend" },
-      "command": ".venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --timeout-graceful-shutdown 2",
-      "windows": { "command": ".venv\\Scripts\\uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --timeout-graceful-shutdown 2" },
+      "command": ".venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --timeout-graceful-shutdown 2 --timeout-keep-alive 75",
+      "windows": { "command": ".venv\\Scripts\\uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --timeout-graceful-shutdown 2 --timeout-keep-alive 75" },
       "isBackground": true,
       "problemMatcher": []
     },

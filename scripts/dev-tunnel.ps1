@@ -15,7 +15,7 @@ $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 try { Invoke-RestMethod "http://localhost:8000/api/health" -TimeoutSec 3 | Out-Null }
 catch {
   Write-Host "The backend isn't running on port 8000. Start it in another terminal first:" -ForegroundColor Yellow
-  Write-Host "  cd backend; .venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --timeout-graceful-shutdown 2"
+  Write-Host "  cd backend; .venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --timeout-graceful-shutdown 2 --timeout-keep-alive 75"
   exit 1
 }
 

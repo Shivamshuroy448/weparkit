@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -11,8 +11,10 @@ from ..campus import BUILDINGS, HAZARD_LOCATIONS, OUTLINE_SOURCE
 from ..config import DATA_DIR, get_settings
 from ..database import get_db
 from ..models import ParkingLot, ParkingRecommendation, ParkingReport, User, VehicleDetection
-from ..schemas import LeaveIn, LotOut, LotsOut, ReportIn, ScanOut
+from ..schemas import CheckInIn, CheckOutIn, LeaveIn, LotOut, LotsOut, ReportIn, ScanOut
 from ..services import geo
+from ..services import sessions
+from ..services.auth import authorize_user
 from ..services import hazards as hz
 from ..services.crew import award, notify
 from ..services.lot_state import campus_now, get_state, is_ice, lot_status, report_expiry, snapshot
@@ -249,3 +251,48 @@ def leaving(body: LeaveIn, db: Session = Depends(get_db)):
     pts = award(db, user, "leaving", n.id)
     hub.publish("lots")
     return {"notification_id": n.id, "points_awarded": pts, "lot": lot_status(db, lot, get_state(db))}
+
+
+# ------------------------------------------------------------------ parked / not parked
+
+def _user_or_404(db: Session, user_id: int) -> User:
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(404, "User not found")
+    return user
+
+
+@router.get("/session")
+def get_session(user_id: int, request: Request, db: Session = Depends(get_db)):
+    """The student's current parking session (null when not parked)."""
+    authorize_user(request, db, user_id)
+    s = sessions.active_session(db, _user_or_404(db, user_id).id)
+    return {"session": sessions.serialize(s, db.get(ParkingLot, s.lot_id) if s else None)}
+
+
+@router.post("/checkin")
+def checkin(body: CheckInIn, request: Request, db: Session = Depends(get_db)):
+    """Mark the student parked in a lot ("I'm parked" button or GPS auto-detect). Takes one space."""
+    authorize_user(request, db, body.user_id)
+    user, lot = _user_or_404(db, body.user_id), _lot_or_404(db, body.lot_id)
+    s = sessions.check_in(db, user, lot, body.source, body.lat, body.lng)
+    hub.publish("lots")
+    return {"session": sessions.serialize(s, lot), "lot": lot_status(db, lot, get_state(db))}
+
+
+@router.post("/checkout")
+def checkout(body: CheckOutIn, request: Request, db: Session = Depends(get_db)):
+    """Mark the student as leaving: frees the space and tells drivers heading there."""
+    authorize_user(request, db, body.user_id)
+    user = _user_or_404(db, body.user_id)
+    s = sessions.active_session(db, user.id)
+    if not s:
+        raise HTTPException(409, "You're not checked in to a lot.")
+    sessions.check_out(db, s, body.source)
+    lot = db.get(ParkingLot, s.lot_id)
+    n = notify(db, "leaving", f"Space opening at {lot.name}",
+               f"{user.handle} just left{' (auto-detected)' if body.source == 'auto' else ''}. A space may be free now.",
+               lot_id=lot.id, user_id=user.id, ttl_min=settings.leaving_notice_ttl_min)
+    pts = award(db, user, "leaving", n.id)
+    hub.publish("lots")
+    return {"session": sessions.serialize(s, lot), "lot": lot_status(db, lot, get_state(db)), "points_awarded": pts}

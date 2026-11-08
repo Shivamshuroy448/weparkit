@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Sequence
+from collections.abc import Sequence
 
 EARTH_M = 6_371_000
 BASE_RADIUS_M = 60.0

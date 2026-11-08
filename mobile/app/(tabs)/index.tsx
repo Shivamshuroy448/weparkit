@@ -1,16 +1,20 @@
 import { router, useFocusEffect } from "expo-router";
 import { Car, Navigation, Square, TriangleAlert, Volume2 } from "lucide-react-native";
-import { useCallback, useState } from "react";
-import { Linking, View } from "react-native";
+import { useCallback, useMemo, useState } from "react";
+import { Linking, Pressable, StyleSheet, View } from "react-native";
 import { api, availabilityTone, directionsUrl, hhmm12, sentence, voicePaths, type Recommendation } from "../../src/api";
 import CampusMap from "../../src/components/CampusMap";
 import Header from "../../src/components/Header";
 import LotRow from "../../src/components/LotCard";
 import ModeToggle from "../../src/components/ModeToggle";
+import AskCard from "../../src/components/AskCard";
+import ParkingStatus from "../../src/components/ParkingStatus";
 import { Badge, Banner, Button, Card, DemoTag, Empty, List, Loading, Metrics, Section, Screen, T, row } from "../../src/components/ui";
 import { useStore } from "../../src/store";
 import { space } from "../../src/theme";
 import { useVoice } from "../../src/voice";
+import { useParking } from "../../src/parking";
+import { metersBetween } from "../../src/parkDetect";
 
 const DEFAULT_DEST = "Davis Hall";
 
@@ -19,6 +23,13 @@ export default function Overview() {
   const [rec, setRec] = useState<Recommendation | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [detailed, setDetailed] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  const pk = useParking();
+  // Nearest first when we know where you are; otherwise most open spaces first.
+  const sortedLots = useMemo(() => {
+    const all = (lots?.lots ?? []).map((lot) => ({ lot, d: pk.position ? Math.round(metersBetween(pk.position, lot)) : null }));
+    return all.sort((a, b) => (a.d != null && b.d != null ? a.d - b.d : b.lot.available - a.lot.available));
+  }, [lots, pk.position]);
   const voice = useVoice();
 
   const loadRec = useCallback(async () => {
@@ -39,8 +50,17 @@ export default function Overview() {
   const alerts = weather?.alerts ?? [];
 
   return (
-    <Screen header={<Header brand title="IceStation" subtitle={`UB North Campus${meta ? ` · ${hhmm12(meta.campus_time)}${meta.simulated_clock ? " (simulated clock)" : ""}` : ""}`} />}
+    <Screen header={<Header brand title="WeParkit" subtitle={`UB North Campus${meta ? ` · ${hhmm12(meta.campus_time)}${meta.simulated_clock ? " (simulated clock)" : ""}` : ""}`} />}
       onRefresh={onRefresh} refreshing={refreshing}>
+
+      <ParkingStatus />
+
+      <AskCard destination={DEFAULT_DEST} />
+
+      <Section title="UB parking map" footer="Numbers are estimated open spaces. Tap a lot for Google Maps directions.">
+        {lots ? <CampusMap lots={lots.lots} hazards={hazards} meta={meta} highlightSlug={best?.slug} height={340} />
+          : <Empty title="Map appears once lot data loads" />}
+      </Section>
 
       <Section title={`Recommended for ${DEFAULT_DEST}`}>
         <Card onPress={() => router.push("/dock")} style={{ gap: space.md }}>
@@ -98,19 +118,23 @@ export default function Overview() {
         ]} />
       )}
 
-      <Section title="Parking lots" action={{ label: detailed ? "Less detail" : "More detail", onPress: () => setDetailed((d) => !d) }}
-        footer={lots?.disclaimer}>
+      <Section title={pk.position ? `Nearest UB lots (${lots?.lots.length ?? 0} total)` : `UB lots (${lots?.lots.length ?? 0})`}
+        action={{ label: detailed ? "Less detail" : "More detail", onPress: () => setDetailed((d) => !d) }}
+        footer={`${lots?.disclaimer ?? ""} Lot outlines © OpenStreetMap contributors.`}>
         {lots ? (
           <Card padded={false}>
-            <List>{lots.lots.map((l) => <LotRow key={l.id} lot={l} detailed={detailed} highlight={l.slug === best?.slug} />)}</List>
+            <List>{sortedLots.slice(0, showAll ? undefined : 8).map(({ lot: l, d }) => (
+              <LotRow key={l.id} lot={l} detailed={detailed} highlight={l.slug === best?.slug} distanceM={d} />
+            ))}</List>
+            {sortedLots.length > 8 && (
+              <Pressable onPress={() => setShowAll((v) => !v)} style={{ padding: space.lg, alignItems: "center", borderTopWidth: StyleSheet.hairlineWidth * 2, borderTopColor: c.divider }}>
+                <T v="label" color={c.accent}>{showAll ? "Show fewer" : `Show all ${sortedLots.length} lots`}</T>
+              </Pressable>
+            )}
           </Card>
         ) : <Loading label="Loading lots" />}
       </Section>
 
-      <Section title="Parking map" footer="Numbers are estimated open spaces. Tap a lot to open driving directions in Google Maps.">
-        {lots ? <CampusMap lots={lots.lots} hazards={hazards} meta={meta} highlightSlug={best?.slug} height={340} />
-          : <Empty title="Map appears once lot data loads" />}
-      </Section>
 
       <Section title="Demo" footer="Uses a bundled sample photo, a simulated GOES-19 storm and a demo weather alert. Everything simulated is labelled.">
         <Card style={{ gap: space.md }}>

@@ -1,26 +1,22 @@
 {
   "expo": {
-    "name": "IceStation UB",
+    "name": "WeParkit",
     "slug": "icestation-ub",
     "scheme": "icestation",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#04060E",
-    "splash": {
-      "backgroundColor": "#04060E",
-      "resizeMode": "contain"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "edu.buffalo.icestation",
       "infoPlist": {
-        "NSCameraUsageDescription": "IceStation uses the camera to scan parking lots and icy walkways.",
-        "NSPhotoLibraryUsageDescription": "IceStation lets you pick a lot or walkway photo to analyse.",
+        "NSCameraUsageDescription": "WeParkit uses the camera to scan parking lots and icy walkways.",
+        "NSPhotoLibraryUsageDescription": "WeParkit lets you pick a lot or walkway photo to analyse.",
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
         },
-        "NSLocationWhenInUseUsageDescription": "IceStation uses your location to tell which parking lot or walkway you are reporting from."
+        "NSLocationWhenInUseUsageDescription": "WeParkit uses your location to tell which parking lot or walkway you are reporting from."
       }
     },
     "android": {
@@ -29,29 +25,46 @@
         "CAMERA",
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION"
-      ],
-      "usesCleartextTraffic": true
+      ]
     },
     "plugins": [
       "expo-router",
       [
         "expo-image-picker",
         {
-          "cameraPermission": "IceStation uses the camera to scan parking lots and icy walkways."
+          "cameraPermission": "WeParkit uses the camera to scan parking lots and icy walkways."
         }
       ],
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "IceStation uses your location to tell which parking lot or walkway you are reporting from."
+          "locationWhenInUsePermission": "WeParkit uses your location to tell which parking lot or walkway you are reporting from."
         }
       ],
       [
         "expo-audio",
         {
-          "microphonePermission": "IceStation listens for a short spoken question in Drive mode when you swipe down.",
+          "microphonePermission": "WeParkit listens for a short spoken question in Drive mode when you swipe down.",
           "recordAudioAndroid": true,
           "enableBackgroundPlayback": false
+        }
+      ],
+      "expo-secure-store",
+      "expo-web-browser",
+      "expo-asset",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#04060E",
+          "resizeMode": "contain"
         }
       ]
     ],

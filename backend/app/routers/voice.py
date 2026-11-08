@@ -7,6 +7,7 @@ used as an open TTS proxy.
 from __future__ import annotations
 
 import secrets
+import threading
 import time
 from collections import OrderedDict
 
@@ -18,7 +19,7 @@ from ..campus import BUILDINGS
 from ..config import get_settings
 from ..database import get_db
 from ..models import ParkingLot
-from ..services import copilot, voice
+from ..services import copilot, llm, voice
 from ..services import hazards as hz
 from ..services import weather
 from ..services.engine import display_reason
@@ -31,13 +32,16 @@ settings = get_settings()
 # Answers waiting to be spoken: token -> (expires_at, text). Small and short-lived.
 _ANSWER_TTL_S, _ANSWER_MAX = 600, 200
 _answers: OrderedDict[str, tuple[float, str]] = OrderedDict()
+# Sync endpoints run on a thread pool: guard the shared in-memory stores.
+_store_lock = threading.Lock()
 
 
 def _remember(text: str) -> str:
     token = secrets.token_urlsafe(9)
-    _answers[token] = (time.time() + _ANSWER_TTL_S, text)
-    while len(_answers) > _ANSWER_MAX:
-        _answers.popitem(last=False)
+    with _store_lock:
+        _answers[token] = (time.time() + _ANSWER_TTL_S, text)
+        while len(_answers) > _ANSWER_MAX:
+            _answers.popitem(last=False)
     return token
 
 
@@ -142,38 +146,91 @@ def answer(db: Session, intent: copilot.Intent, destination: str, arrival: str |
             "action": action, "destination": dest}
 
 
+# Conversation memory for follow-ups ("is it full?"): conversation_id -> state. In-memory, short-lived.
+_CONVO_TTL_S, _CONVO_MAX = 900, 300
+_convos: OrderedDict[str, dict] = OrderedDict()
+
+
+def _convo(cid: str | None) -> tuple[str, dict]:
+    now = time.time()
+    with _store_lock:
+        if cid and cid in _convos and _convos[cid]["expires"] > now:
+            c = _convos[cid]
+            _convos.move_to_end(cid)
+        else:
+            cid = secrets.token_urlsafe(9)
+            c = _convos[cid] = {"turns": [], "lot": None}
+            while len(_convos) > _CONVO_MAX:
+                _convos.popitem(last=False)
+        c["expires"] = now + _CONVO_TTL_S
+    return cid, c
+
+
+def _llm_context(db: Session, destination: str, arrival: str | None, accessible: bool) -> str:
+    """Compact live snapshot for Gemini: mode, the recommendation, and lot availability."""
+    state = get_state(db)
+    rec = compute_recommendation(db, destination, arrival, accessible)
+    lots = [lot_status(db, l, state) for l in db.scalars(select(ParkingLot))]
+    top = sorted(lots, key=lambda s: -s["available"])[:10]
+    lines = [f"Mode: {'ice season' if is_ice(state) else 'standard'}. {display_reason(state)}",
+             f"Destination: {destination}. " + (f"Best lot: {rec['best']['name']}, about {rec['best']['expected_open_spaces']} open "
+                                                f"at arrival {rec['arrival_time']}, leave by {rec['best']['recommended_departure']}."
+                                                if rec["best"] else "No lot recommended."),
+             f"UB North Campus has {len(lots)} lots, about {sum(s['available'] for s in lots)} spaces estimated open.",
+             "Most open lots: " + "; ".join(f"{s['name']} ~{s['available']} open ({round(s['occupancy_pct'])}% full)" for s in top),
+             f"Active walkway hazards: {len(hz.active_hazards(db))}."]
+    return "\n".join(lines)
+
+
 @router.post("/ask")
 async def ask(file: UploadFile | None = File(None, description="Short spoken question (m4a/webm/wav)"),
               text: str | None = Form(None, description="Typed question; skips speech-to-text"),
               destination: str = Form("Davis Hall"), arrival: str | None = Form(None), accessible: bool = Form(False),
+              conversation_id: str | None = Form(None, description="Returned by the previous turn; enables follow-ups"),
               db: Session = Depends(get_db)):
-    """Voice co-pilot: speech-to-text (ElevenLabs Scribe) -> intent -> server-written answer.
-    Play the answer from `speech_path` (ElevenLabs audio, or `?text_only=true` for the device voice)."""
+    """Conversational co-pilot: speech-to-text (ElevenLabs Scribe) -> intent (with follow-up memory) ->
+    answer. Common questions get deterministic, data-backed answers; anything else goes to Gemini with live
+    lot data as context. Play the reply from `speech_path`; `end_conversation` tells the client to stop listening."""
     if destination not in BUILDINGS:
         raise HTTPException(400, "Unknown destination")
+    cid, convo = _convo(conversation_id)
     transcript = (text or "").strip()
     if not transcript and file is not None:
         try:
             transcript = voice.transcribe(await file.read(), file.filename or "question.m4a", file.content_type or "audio/mp4")
         except voice.VoiceError as exc:
             raise HTTPException(exc.status, str(exc)) from exc
+    source = "rules"
     if not transcript:
         if file is None:
             raise HTTPException(400, "Send a recording (file) or a typed question (text).")
         res = {"text": "Sorry, I didn't catch that. " + copilot.HELP_TEXT, "lot": None, "action": None, "destination": destination}
         intent = copilot.Intent("help")
     else:
-        intent = copilot.parse(transcript, list(BUILDINGS))
-        res = answer(db, intent, destination, arrival, accessible)
+        lot_names = [(l.slug, l.name) for l in db.scalars(select(ParkingLot))]
+        intent = copilot.parse(transcript, list(BUILDINGS), lot_names, convo["lot"])
+        if intent.kind == "end":
+            res = {"text": copilot.END_TEXT, "lot": None, "action": None, "destination": destination}
+        elif intent.kind == "help":
+            reply = llm.answer(transcript, _llm_context(db, intent.destination or destination, arrival, accessible), convo["turns"])
+            res = {"text": reply or copilot.HELP_TEXT, "lot": None, "action": None, "destination": intent.destination or destination}
+            source = "gemini" if reply else "rules"
+        else:
+            res = answer(db, intent, destination, arrival, accessible)
+        if res["lot"]:
+            convo["lot"] = res["lot"]["slug"]
+        convo["turns"] = (convo["turns"] + [(transcript, res["text"])])[-8:]
     token = _remember(res["text"])
     return {"transcript": transcript, "intent": intent.kind, "answer": res["text"], "lot": res["lot"],
-            "action": res["action"], "destination": res["destination"], "speech_path": f"/api/voice/say/{token}"}
+            "action": res["action"], "destination": res["destination"], "speech_path": f"/api/voice/say/{token}",
+            "conversation_id": cid, "end_conversation": intent.kind == "end", "answered_by": source}
 
 
 @router.get("/say/{token}")
 def say(token: str, text_only: bool = False):
     """Speaks a co-pilot answer created by /ask (expires after 10 minutes)."""
-    item = _answers.get(token)
+    with _store_lock:
+        item = _answers.get(token)
     if not item or item[0] < time.time():
         raise HTTPException(404, "Answer expired. Ask again.")
     return _out(item[1], text_only)

@@ -6,18 +6,17 @@ assumed. During a demo storm replay a clearly-marked DEMO alert is injected.
 """
 from __future__ import annotations
 
-import time
 from datetime import timedelta
 
 import httpx
 
 from ..config import get_settings
 from ..timeutil import iso, utcnow
+from .swr import SWRCache
 
 settings = get_settings()
 WINTER_WORDS = ("snow", "winter", "blizzard", "ice", "freez", "sleet", "squall", "wind chill", "cold")
 
-_cache: dict = {"t": 0.0, "data": None}
 _demo: dict = {"alert": None, "until": None, "observation": None}
 
 
@@ -65,11 +64,10 @@ def _fetch_live() -> dict:
 def current(force: bool = False) -> dict:
     if not settings.weather_live_enabled:
         data = {"alerts": [], "observation": None, "errors": ["Live weather disabled (WEATHER_LIVE_ENABLED=false)"], "source": "unavailable"}
-    elif force or time.time() - _cache["t"] > 300 or _cache["data"] is None:
-        data = _fetch_live()
-        _cache.update(t=time.time(), data=data)
     else:
-        data = _cache["data"]
+        # Stale-while-revalidate: never block a request on api.weather.gov once warm.
+        data = nws_cache.get(force=force) or {"alerts": [], "observation": None,
+                                              "errors": ["Weather not loaded yet"], "source": "unavailable"}
 
     alerts = list(data["alerts"])
     observation = data["observation"]
@@ -97,13 +95,16 @@ def current(force: bool = False) -> dict:
     }
 
 
+nws_cache = SWRCache("nws", lambda: _fetch_live(), ttl_s=300)
+
+
 def inject_demo_storm(hours: float = 3.0) -> None:
     now = utcnow()
     _demo["alert"] = {
         "id": "demo-lake-effect", "event": "Lake Effect Snow Warning (DEMO)",
         "headline": "DEMONSTRATION ONLY: simulated Lake Effect Snow Warning for Erie County. Not an NWS product.",
         "severity": "Moderate", "onset": iso(now), "ends": iso(now + timedelta(hours=hours)),
-        "winter": True, "demo": True, "source": "IceStation demo",
+        "winter": True, "demo": True, "source": "WeParkit demo",
     }
     _demo["observation"] = {"temperature_c": -6.0, "wind_kph": 32.0, "condition": "Light snow (DEMO)",
                             "observed_at": iso(now), "station": "DEMO"}

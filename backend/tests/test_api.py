@@ -5,7 +5,8 @@ def test_health(client):
 
 def test_lots_and_detail(client):
     lots = client.get("/api/parking/lots").json()
-    assert len(lots["lots"]) == 4 and "not live UB Parking data" in lots["disclaimer"]
+    from app.campus import LOTS
+    assert len(lots["lots"]) == len(LOTS) >= 30 and "not live UB Parking data" in lots["disclaimer"]
     lot = lots["lots"][0]
     assert lot["available"] == lot["snow_adjusted_capacity"] - lot["occupied"]
     assert client.get(f"/api/parking/lots/{lot['id']}").status_code == 200
@@ -32,7 +33,9 @@ def test_scan_correction(client):
     scan = client.post("/api/parking/scan", data={"lot_id": lot_id, "sample_id": "hochstetter_b_busy"}).json()
     rep = client.post("/api/parking/report", json={"lot_id": lot_id, "scan_id": scan["scan_id"],
                                                    "occupied_spaces": 10, "open_spaces": 30, "snow_blocked_spaces": 0}).json()
-    assert rep["corrected"] and rep["lot"]["occupancy_pct"] == 25.0
+    # 10 of 40 stalls in frame = 25 %, applied to the whole lot and rounded to whole cars
+    cap = rep["lot"]["snow_adjusted_capacity"]
+    assert rep["corrected"] and abs(rep["lot"]["occupancy_pct"] - 25.0) <= 100 / cap
 
 
 def test_scan_rejects_bad_upload(client):
