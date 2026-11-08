@@ -1,10 +1,19 @@
 # WeParkit 
 
-**Parking that knows it's winter in Buffalo.** UB Hacking 2026 · Theme: Deep Space
+**Smart, high-speed campus parking for University at Buffalo (North Campus).**
 
-Crowd-sourced parking and walkway safety for UB North Campus. Students scan lots, AI estimates the
-open spaces, and a NOAA GOES-19 weather satellite switches the whole app into ice season before
-the snow arrives.
+WeParkit is an intelligent driver co-pilot and real-time parking navigation tool designed for Buffalo winter conditions. It features instant one-tap check-ins, legal permit tier filtering, peer-to-peer spot hand-offs (Spot Sniper), persistent car location recovery (Blizzard Radar), and automated snow-adjusted capacity forecasting.
+
+## Core Features (WeParkit 2.0)
+
+- **Emerald & Amber Design Language**: High-contrast, driver-safe color scheme combining Vibrant Emerald Green (`#22C55E`) for primary actions and Warm Amber Gold (`#FFB547`) for active navigation and filters over a deep midnight navy starfield canvas.
+- **Permit Tier Filtering**: One-tap filter chips (`All Permits`, `Commuter`, `Park & Ride`, `Residence`, `Visitor`) to prevent expensive parking tickets by highlighting only legally accessible lots out of all 34 North Campus lots.
+- **Spot Sniper (Peer-to-Peer Hand-off)**: When a parked student taps *"I'm leaving in 2 min"*, arriving commuters circling the lot receive a live targeting alert with direct navigation to the departing spot.
+- **"Remember Where I Parked" & Blizzard Radar**: Persistent GPS vehicle spot pinning saved in offline storage. In whiteout conditions, the Blizzard Radar HUD uses device compass bearing and vibrating haptic pulses to guide students straight to their snowed-in bumper.
+- **Dynamic "Time to Leave" Alerts**: Computes required departure times with real-time drive time, walk times to destination academic buildings (Davis Hall, Capen, Student Union, etc.), and a winter blizzard buffer.
+- **Safe Driver HUD**: Massive, high-contrast touch targets for safe glanceability at arm's length while navigating icy roads.
+- **Voice AI Co-pilot**: Low-latency conversational briefings powered by ElevenLabs speech synthesis and Google Gemini intelligence.
+- **Product Evolution Report**: Full 13-page design and architecture justification document with side-by-side visual comparisons available in [`WeParkit_Product_Evolution_Report.pdf`](./WeParkit_Product_Evolution_Report.pdf).
 
 ```
 icestation-ub/
