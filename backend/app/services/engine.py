@@ -53,7 +53,7 @@ def apply_mode(db: Session, state: SystemState) -> None:
             notify(db, "ice_season", "Ice season is on",
                    f"{serialize_state(state)['source_label']}. {display_reason(state)}", is_demo=state.demo_active or how == "manual_override")
         elif prev == "ice":
-            notify(db, "ice_season", "Back to standard orbit", display_reason(state), is_demo=state.demo_active or how == "manual_override")
+            notify(db, "ice_season", "Ice season is off", display_reason(state), is_demo=state.demo_active or how == "manual_override")
     hub.publish("state")
     hub.publish("lots")
 

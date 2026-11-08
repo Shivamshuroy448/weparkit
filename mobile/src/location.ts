@@ -25,7 +25,7 @@ export function useLotLocator(auto = true) {
       const cached = await Location.getLastKnownPositionAsync({ maxAge: 60_000, requiredAccuracy: 60 });
       const pos = cached ?? await Promise.race([
         Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }),
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("GPS timed out. Step outside or pick the lot by hand.")), 15000)),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("Location timed out. Step outside or pick the lot manually.")), 15000)),
       ]);
       const r = await api.locate(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
       if (alive.current) { setResult(r); setStatus("done"); }
@@ -42,6 +42,6 @@ export function useLotLocator(auto = true) {
 }
 
 export const methodLabel = (r: LocateResult) =>
-  r.method === "inside_outline" ? "GPS: inside lot outline"
-    : r.method === "nearest_outline" ? `GPS: ${Math.round(r.distance_m ?? 0)} m from lot edge`
-      : r.on_campus ? "GPS: not in a known lot" : "GPS: you're not on North Campus";
+  r.method === "inside_outline" ? "You're inside"
+    : r.method === "nearest_outline" ? `${Math.round(r.distance_m ?? 0)} m from`
+      : r.on_campus ? "Not in a known lot" : "You're not on North Campus";

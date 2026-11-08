@@ -23,7 +23,7 @@ from ..services.vision.pipeline import ImageError, analyze_parking
 router = APIRouter(prefix="/api/parking", tags=["parking"])
 settings = get_settings()
 SAMPLES_DIR = DATA_DIR / "samples"
-DISCLAIMER = ("Capacities are configurable prototype estimates and occupancy comes from crew reports or a seed model. "
+DISCLAIMER = ("Capacities are configurable prototype estimates and occupancy comes from student reports or a seed model. "
               "This is not live UB Parking data.")
 
 
@@ -135,6 +135,8 @@ def report(body: ReportIn, db: Session = Depends(get_db)):
         det = db.get(VehicleDetection, body.scan_id)
         if not det or det.lot_id != lot.id:
             raise HTTPException(404, "Scan not found for this lot")
+        if det.confirmed:
+            raise HTTPException(409, "This scan has already been submitted.")
         raw = det.raw
         occ = body.occupied_spaces if body.occupied_spaces is not None else raw.get("occupied_spaces", det.vehicles_detected)
         open_ = body.open_spaces if body.open_spaces is not None else det.estimated_open_spaces
@@ -172,7 +174,7 @@ def report(body: ReportIn, db: Session = Depends(get_db)):
         db.commit()
     pts = award(db, user, "scan" if det else "report", rep.id)
     status = lot_status(db, lot, get_state(db))
-    notify(db, "scan", f"{lot.name} updated by the crew",
+    notify(db, "scan", f"{lot.name} updated from a student report",
            f"~{status['available']} spaces estimated open ({status['occupancy_pct']}% full). Expires in {settings.parking_report_ttl_min} min.",
            lot_id=lot.id, is_demo=body.is_demo)
     hub.publish("lots")
@@ -182,8 +184,20 @@ def report(body: ReportIn, db: Session = Depends(get_db)):
 
 @router.get("/recommendations")
 def recommendations(destination: str = Query("Davis Hall"), arrival: str | None = Query(None, description="HH:MM 24h"),
-                    accessible: bool = False, drive_minutes: int = Query(None, ge=0, le=180),
+                    accessible: bool = False, drive_minutes: int | None = Query(None, ge=0, le=180),
                     user_id: int | None = None, db: Session = Depends(get_db)):
+    result = compute_recommendation(db, destination, arrival, accessible, drive_minutes)
+    db.add(ParkingRecommendation(user_id=user_id, destination=destination, arrival_time=result["arrival_time"],
+                                 mode=result["mode"], best_lot_slug=(result["best"] or {}).get("slug"),
+                                 backup_lot_slug=(result["backup"] or {}).get("slug"),
+                                 result={k: result[k] for k in ("best", "backup", "explanation")}))
+    db.commit()
+    return result
+
+
+def compute_recommendation(db: Session, destination: str, arrival: str | None, accessible: bool = False,
+                           drive_minutes: int | None = None) -> dict:
+    """Best/backup lot, per-lot ranking with route status, and a fill forecast for the best lot."""
     if destination not in BUILDINGS:
         raise HTTPException(400, f"Unknown destination. Choose one of: {', '.join(BUILDINGS)}")
     state = get_state(db)
@@ -222,11 +236,6 @@ def recommendations(destination: str = Query("Davis Hall"), arrival: str | None 
         result["backup"]["route"] = routes[result["backup"]["slug"]]
     result["simulated_clock"] = simulated
     result["now"] = now.strftime("%H:%M")
-    db.add(ParkingRecommendation(user_id=user_id, destination=destination, arrival_time=result["arrival_time"],
-                                 mode=result["mode"], best_lot_slug=(result["best"] or {}).get("slug"),
-                                 backup_lot_slug=(result["backup"] or {}).get("slug"),
-                                 result={k: result[k] for k in ("best", "backup", "explanation")}))
-    db.commit()
     return result
 
 
@@ -234,7 +243,7 @@ def recommendations(destination: str = Query("Davis Hall"), arrival: str | None 
 def leaving(body: LeaveIn, db: Session = Depends(get_db)):
     lot = _lot_or_404(db, body.lot_id)
     user = db.get(User, body.user_id) if body.user_id else None
-    who = user.handle if user else "A crew member"
+    who = user.handle if user else "Someone"
     n = notify(db, "leaving", f"Space opening at {lot.name}", f"{who} is leaving now. A space may open in the next few minutes.",
                lot_id=lot.id, user_id=user.id if user else None, ttl_min=settings.leaving_notice_ttl_min)
     pts = award(db, user, "leaving", n.id)

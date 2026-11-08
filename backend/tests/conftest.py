@@ -8,6 +8,7 @@ os.environ["DATABASE_URL"] = f"sqlite:///{Path(_tmp) / 'test.db'}"
 os.environ["SATELLITE_LIVE_ENABLED"] = "false"
 os.environ["WEATHER_LIVE_ENABLED"] = "false"
 os.environ["GEMINI_API_KEY"] = ""
+os.environ["ELEVENLABS_API_KEY"] = ""
 os.environ["VISION_PROVIDER"] = "opencv"
 os.environ["SIM_CLOCK"] = "09:30"
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))

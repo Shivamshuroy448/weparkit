@@ -33,6 +33,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [lastSeen, setLastSeen] = useState(0);
   const tid = useRef(1);
+  const failures = useRef(0);
 
   const toast = useCallback((text: string, kind: Toast["kind"] = "ok") => {
     const id = tid.current++;
@@ -62,15 +63,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         case "crew": return loadUser();
       }
     }));
-    const failed = results.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
-    const reason = failed?.reason as { status?: number; message?: string } | undefined;
-    setBackendDown(reason?.status === 0 ? reason.message ?? "Backend unreachable" : null);
+    // Only network failures (status 0) count. One blip (backend reload, Wi-Fi hiccup) shouldn't flash a
+    // red banner, so it appears after two failed refreshes in a row and clears on the first success.
+    const netFail = results.find((r) => r.status === "rejected" && (r.reason as { status?: number })?.status === 0) as PromiseRejectedResult | undefined;
+    if (netFail) {
+      failures.current += 1;
+      if (failures.current >= 2) setBackendDown((netFail.reason as Error).message ?? "Backend unreachable");
+    } else if (results.some((r) => r.status === "fulfilled")) {
+      failures.current = 0;
+      setBackendDown(null);
+    }
   }, [loadUser]);
 
   // initial load, polling fallback, and refresh when the app returns to the foreground
   useEffect(() => {
     refresh("lots", "state", "hazards", "notifications", "weather", "meta", "health", "crew");
-    const t = setInterval(() => refresh("lots", "state", "hazards", "notifications"), 15000);
+    // health is polled too: it carries voice availability and must recover if launch-time fetch failed.
+    const t = setInterval(() => refresh("lots", "state", "hazards", "notifications", "health"), 15000);
     const sub = AppState.addEventListener("change", (s) => { if (s === "active") refresh(); });
     return () => { clearInterval(t); sub.remove(); };
   }, [refresh]);
@@ -80,8 +89,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     let ws: WebSocket | null = null;
     let closed = false;
     let retry: ReturnType<typeof setTimeout>;
+    let opened = false;
     const connect = () => {
       ws = new WebSocket(`${WS_BASE}/ws`);
+      // A reconnect means the backend came back: resync everything instead of waiting for the next poll.
+      ws.onopen = () => { if (opened) refresh("lots", "state", "hazards", "notifications", "weather", "health", "crew"); opened = true; };
       ws.onmessage = (e) => {
         try {
           const { event } = JSON.parse(String(e.data)) as { event: string };

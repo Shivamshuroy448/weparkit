@@ -15,10 +15,10 @@ from sqlalchemy.orm import Session
 from .config import DATA_DIR, get_settings
 from .database import SessionLocal, get_db
 from .models import ParkingReport
-from .routers import community, orbital, parking
+from .routers import community, orbital, parking, voice as voice_routes
 from .schemas import HealthOut
 from .seed import init
-from .services import gemini_status, satellite as sat, weather
+from .services import gemini_status, satellite as sat, voice, weather
 from .services.lot_state import campus_now, get_state
 from .services.realtime import hub
 from .services.vision.detectors import get_detector
@@ -31,19 +31,17 @@ settings = get_settings()
 
 async def expiry_loop() -> None:
     """Every 30 s: expire hazards and tell clients when crew parking reports age out."""
+    from .services.hazards import expire_hazards
     last_live = None
     while True:
         try:
             with SessionLocal() as db:
-                from .services.hazards import active_hazards
-                before = len(active_hazards(db))
+                if expire_hazards(db):
+                    hub.publish("hazards")
                 live = db.scalar(select(func.count(ParkingReport.id)).where(ParkingReport.expires_at > utcnow()))
                 if last_live is not None and live < last_live:
                     hub.publish("lots")
                 last_live = live
-                after = len(active_hazards(db))
-                if after != before:
-                    hub.publish("hazards")
         except Exception as exc:  # never let the loop die
             log.warning("expiry loop: %s", exc)
         await asyncio.sleep(30)
@@ -65,13 +63,13 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="IceStation UB API", version="1.0.0", lifespan=lifespan,
-              description="Mission control for UB North Campus parking and winter safety. Hackathon prototype.")
+              description="Parking availability and winter walkway safety for UB North Campus. Hackathon prototype.")
 app.add_middleware(CORSMiddleware, allow_origins=settings.cors_list, allow_origin_regex=settings.cors_origin_regex or None,
                    allow_credentials=True,
                    allow_methods=["*"], allow_headers=["*"])
 
 for r in (parking.router, orbital.weather_router, orbital.satellite_router, orbital.system_router,
-          community.hazard_router, community.crew_router, community.notif_router):
+          community.hazard_router, community.crew_router, community.notif_router, voice_routes.router):
     app.include_router(r)
 
 for sub in ("uploads", "satellite", "samples"):
@@ -95,6 +93,7 @@ def health(db: Session = Depends(get_db)):
         "gemini_configured": gemini_status(),
         "satellite_source": "goes19_live" if listing else "simulated",
         "weather_source": wx["source"], "simulated_clock": simulated, "time_campus": now.strftime("%H:%M"),
+        "voice_enabled": voice.configured(),
     }
 
 
@@ -105,4 +104,6 @@ async def ws(websocket: WebSocket):
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
+        pass
+    finally:
         hub.disconnect(websocket)

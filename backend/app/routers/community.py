@@ -77,7 +77,7 @@ async def report_hazard(location_name: str = Form(...), category: str = Form("au
     else:
         cat, by = category, "reporter"
         conf = 0.7 if not ai else (min(0.9, 0.7 + 0.15 * ai["confidence"]) if ai["category"] == category else 0.6)
-        why = "Reported by a crew member." + (f" AI saw: {ai['category']} ({round(ai['confidence']*100)}%)." if ai else "")
+        why = "Reported by a student." + (f" AI saw: {ai['category']} ({round(ai['confidence']*100)}%)." if ai else "")
 
     user = db.get(User, user_id) if user_id else None
     h = HazardReport(user_id=user.id if user else None, location_name=location_name, lat=lat, lng=lng, category=cat,
@@ -90,7 +90,7 @@ async def report_hazard(location_name: str = Form(...), category: str = Form("au
         db.commit()
     pts = award(db, user, "hazard", h.id)
     extra = " Wheelchair users: treat this as a hard stop." if cat == "blocked_ramp" else ""
-    notify(db, "hazard", f"{hz.CATEGORY_LABELS[cat]} at {location_name}", f"Reported by the crew.{extra}", is_demo=is_demo,
+    notify(db, "hazard", f"{hz.CATEGORY_LABELS[cat]} at {location_name}", f"Reported by a student.{extra}", is_demo=is_demo,
            hazard_id=h.id)
     hub.publish("hazards")
     return {"created": True, "hazard": hz.serialize(h), "ai": ai, "points_awarded": pts}
@@ -133,7 +133,7 @@ def _vote(db: Session, h: HazardReport, user: User, vote: str) -> dict:
     db.commit()
     pts = 0 if flipped else award(db, user, "verify" if vote == "confirm" else "clear", h.id)
     if cleared:
-        notify(db, "hazard", f"Cleared: {h.location_name}", f"The crew reports the {hz.CATEGORY_LABELS[h.category].lower()} is gone.")
+        notify(db, "hazard", f"Cleared: {h.location_name}", f"Students report the {hz.CATEGORY_LABELS[h.category].lower()} is gone.")
     hub.publish("hazards")
     return {"hazard": hz.serialize(h), "cleared": cleared, "points_awarded": pts}
 
@@ -158,7 +158,8 @@ def clear(hazard_id: int, body: HazardClearIn, db: Session = Depends(get_db)):
 
 @crew_router.get("/leaderboard")
 def leaderboard(limit: int = Query(10, ge=1, le=50), db: Session = Depends(get_db)):
-    users = db.scalars(select(User).order_by(User.points.desc(), User.id).limit(limit)).all()
+    # Contributors only: anonymous profiles that haven't earned points yet would just pad the list.
+    users = db.scalars(select(User).where(User.points > 0).order_by(User.points.desc(), User.id).limit(limit)).all()
     return {"leaderboard": [serialize_user(u, i + 1) for i, u in enumerate(users)]}
 
 
@@ -186,10 +187,15 @@ def assist(body: AssistIn, db: Session = Depends(get_db)):
         raise HTTPException(404, "User not found")
     if body.action == "respond":
         req = db.get(Notification, body.request_id) if body.request_id else None
-        if not req or req.kind != "assist":
+        # Only open help requests carry a "responders" list; "X is on the way" replies are also kind=assist.
+        if not req or req.kind != "assist" or "responders" not in (req.meta or {}):
             raise HTTPException(404, "Assist request not found")
+        if req.expires_at is not None and req.expires_at <= utcnow():
+            raise HTTPException(410, "This help request has expired.")
         if req.user_id == user.id:
             raise HTTPException(400, "You can't respond to your own request.")
+        if user.handle in req.meta["responders"]:
+            raise HTTPException(409, "You're already responding to this request.")
         req.meta = {**(req.meta or {}), "responders": [*(req.meta or {}).get("responders", []), user.handle]}
         db.commit()
         pts = award(db, user, "assist_help", req.id)
@@ -199,11 +205,11 @@ def assist(body: AssistIn, db: Session = Depends(get_db)):
     where = lot.name if lot else (body.location_note or "North Campus")
     detail = f"{where}{' · ' + body.location_note if lot and body.location_note else ''}"
     helpers = db.query(User).filter(User.accepts_assist_requests.is_(True), User.id != user.id).count()
-    n = notify(db, "assist", f"Stuck in orbit: {user.handle} needs a push", detail, lot_id=lot.id if lot else None,
+    n = notify(db, "assist", f"{user.handle} is stuck and needs a push", detail, lot_id=lot.id if lot else None,
                user_id=user.id, ttl_min=60, responders=[])
     award(db, user, "assist_request", n.id)
     return {"ok": True, "request_id": n.id, "crew_alerted": helpers,
-            "message": f"Request sent to {helpers} crew members who opted in to help."}
+            "message": f"Request sent to {helpers} {'person' if helpers == 1 else 'people'} who opted in to help."}
 
 
 @notif_router.get("/notifications")

@@ -22,6 +22,7 @@ class HealthOut(BaseModel):
     weather_source: str
     simulated_clock: bool
     time_campus: str
+    voice_enabled: bool = False
 
 
 class LotOut(Open):

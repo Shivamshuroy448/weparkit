@@ -3,21 +3,24 @@
 // automatically for the web platform; native keeps the real map in CampusMap.tsx.
 // Plain DOM <svg> (not react-native-svg): its web shapes crash on pressable groups in this version.
 import { useState } from "react";
-import { Pressable, View } from "react-native";
-import type { Hazard, Lot, Meta } from "../api";
+import { View } from "react-native";
+import { lotFull, type Hazard, type Lot, type Meta } from "../api";
 import { useStore } from "../store";
-import { font } from "../theme";
+import { radius } from "../theme";
+import LotSheet from "./LotSheet";
 import { T } from "./ui";
 
-const PAD = 18;
+const PAD = 64; // room for lot names centred on edge lots
+const FONT = "system-ui, -apple-system, Segoe UI, sans-serif";
 
-export default function CampusMap({ lots, hazards, meta, height = 260, highlightSlug, onPickLocation }: {
+export default function CampusMap({ lots, hazards, meta, height = 300, highlightSlug, onPickLocation }: {
   lots: Lot[]; hazards: Hazard[]; meta: Meta | null; height?: number; highlightSlug?: string | null;
   onPickLocation?: (name: string) => void;
 }) {
   const { c } = useStore();
   const [width, setWidth] = useState(360);
-  const [sel, setSel] = useState<string | null>(null);
+  const [selId, setSelId] = useState<number | null>(null);
+  const [hzId, setHzId] = useState<number | null>(null);
 
   // Fit every point into the box with an equirectangular projection (fine at campus scale).
   const pts: [number, number][] = [
@@ -30,58 +33,68 @@ export default function CampusMap({ lots, hazards, meta, height = 260, highlight
   const [minLat, maxLat, minLng, maxLng] = [Math.min(...lats), Math.max(...lats), Math.min(...lngs), Math.max(...lngs)];
   const k = Math.cos(((minLat + maxLat) / 2) * Math.PI / 180);
   const spanX = (maxLng - minLng) * k || 1e-6, spanY = maxLat - minLat || 1e-6;
-  const scale = Math.min((width - 2 * PAD) / spanX, (height - 2 * PAD) / spanY);
-  const ox = (width - spanX * scale) / 2, oy = (height - spanY * scale) / 2;
+  // Leave room at the bottom for the detail sheet.
+  const usableH = height - 2 * PAD - 40;
+  const scale = Math.min((width - 2 * PAD) / spanX, usableH / spanY);
+  const ox = (width - spanX * scale) / 2, oy = PAD + (usableH - spanY * scale) / 2;
   const xy = (lat: number, lng: number) => [ox + (lng - minLng) * k * scale, oy + (maxLat - lat) * scale] as const;
 
-  const info = sel ?? (highlightSlug ? lots.find((l) => l.slug === highlightSlug)?.name ?? null : null);
-  const selLot = lots.find((l) => l.name === info);
-  const selHz = hazards.find((h) => `h${h.id}` === sel);
+  const sel = lots.find((l) => l.id === selId) ?? null;
+  const selHz = hazards.find((h) => h.id === hzId) ?? null;
 
   return (
-    <View style={{ height, borderRadius: 18, overflow: "hidden", borderWidth: 1, borderColor: c.line, backgroundColor: c.panel }}
+    <View style={{ height, borderRadius: radius.lg, overflow: "hidden", borderWidth: 1, borderColor: c.border, backgroundColor: c.surfaceSolid }}
       onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
-      <svg width={width} height={height} style={{ display: "block" }}>
-        <rect x={0} y={0} width={width} height={height} fill="#0d1329" />
+      <svg width={width} height={height} style={{ display: "block" }} onClick={() => { setSelId(null); setHzId(null); }}>
+        <rect x={0} y={0} width={width} height={height} fill={c.surfaceSolid} />
         {lots.map((l) => {
-          const col = l.occupancy_pct >= 95 ? c.orange : c.cyan;
-          const hi = l.slug === highlightSlug || l.name === sel;
-          const [lx] = xy(l.lat, l.lng);
-          const top = Math.min(...l.polygon.map(([a, b]) => xy(a, b)[1]));
-          const ly = Math.max(22, top - 6); // labels sit above the outline, not on it
+          const col = l.occupancy_pct >= 95 ? c.warn : c.accent;
+          const hi = l.id === selId || (selId == null && l.slug === highlightSlug);
           return (
-            <g key={l.id} onClick={() => setSel(l.name)} style={{ cursor: "pointer" }}>
-              <polygon points={l.polygon.map(([a, b]) => xy(a, b).join(",")).join(" ")}
-                fill={col} fillOpacity={hi ? 0.45 : 0.22} stroke={col} strokeWidth={hi ? 2.5 : 1.2} />
-              <text x={lx} y={ly - 11} fill={c.ink} fontSize={10} fontFamily={font.semibold} textAnchor="middle">{l.name}</text>
-              <text x={lx} y={ly} fill={col} fontSize={9} fontFamily={font.mono} textAnchor="middle">{`~${l.available} open`}</text>
-            </g>
+            <polygon key={l.id} points={l.polygon.map(([a, b]) => xy(a, b).join(",")).join(" ")}
+              fill={col} fillOpacity={hi ? 0.35 : 0.14} stroke={col} strokeWidth={hi ? 2 : 1}
+              onClick={(e) => { e.stopPropagation(); setSelId(l.id); setHzId(null); }} style={{ cursor: "pointer" }} />
           );
         })}
         {meta?.buildings.map((b) => {
           const [x, y] = xy(b.lat, b.lng);
-          return <circle key={b.name} cx={x} cy={y} r={3} fill={c.muted} onClick={() => setSel(b.name)} />;
+          return <circle key={b.name} cx={x} cy={y} r={3} fill={c.textFaint}><title>{b.name}</title></circle>;
         })}
         {onPickLocation && meta?.hazard_locations.map((h) => {
           const [x, y] = xy(h.lat, h.lng);
-          return <circle key={h.name} cx={x} cy={y} r={6} fill="none" stroke="#8A97B8" strokeWidth={1.5} onClick={() => onPickLocation(h.name)} style={{ cursor: "pointer" }} />;
+          return <circle key={h.name} cx={x} cy={y} r={6} fill="none" stroke={c.textMuted} strokeWidth={1.5}
+            onClick={(e) => { e.stopPropagation(); onPickLocation(h.name); }} style={{ cursor: "pointer" }} />;
         })}
         {hazards.map((h) => {
           const [x, y] = xy(h.lat, h.lng);
-          return <circle key={h.id} cx={x} cy={y} r={6} fill={h.category === "blocked_ramp" ? c.bad : c.orange} stroke="#080B18" strokeWidth={1.5}
-            onClick={() => setSel(`h${h.id}`)} style={{ cursor: "pointer" }} />;
+          return <circle key={h.id} cx={x} cy={y} r={6} fill={h.category === "blocked_ramp" ? c.danger : c.warn} stroke={c.bg} strokeWidth={1.5}
+            onClick={(e) => { e.stopPropagation(); setHzId(h.id); setSelId(null); }} style={{ cursor: "pointer" }} />;
+        })}
+        {/* Lot labels last so they sit above shapes: name + open-space pill */}
+        {lots.map((l) => {
+          const [x, y] = xy(l.lat, l.lng);
+          const full = lotFull(l);
+          const on = l.id === selId;
+          const label = full ? "Full" : String(l.available);
+          const w = 12 + label.length * 7;
+          return (
+            <g key={`t${l.id}`} onClick={(e) => { e.stopPropagation(); setSelId(l.id); setHzId(null); }} style={{ cursor: "pointer" }}>
+              <rect x={x - w / 2} y={y - 10} width={w} height={20} rx={10} fill={on ? c.text : full ? c.warn : c.accent} stroke={c.bg} strokeWidth={2} />
+              <text x={x} y={y + 4} fill={on ? c.bg : full ? "#1B1305" : c.onAccent} fontSize={12} fontWeight={700} fontFamily={FONT} textAnchor="middle">{label}</text>
+              <text x={x} y={y - 15} fill={c.text} fontSize={11} fontWeight={500} fontFamily={FONT} textAnchor="middle">{l.name}</text>
+            </g>
+          );
         })}
       </svg>
-      <View style={{ position: "absolute", left: 8, right: 8, bottom: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" }}>
-        <Pressable onPress={() => setSel(null)} style={{ backgroundColor: "rgba(8,11,24,0.85)", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, flexShrink: 1 }}>
-          <T v="small">
+      {sel ? <LotSheet lot={sel} onClose={() => setSelId(null)} /> : (
+        <View pointerEvents="none" style={{ position: "absolute", left: 8, right: 8, bottom: 8, flexDirection: "row", justifyContent: "space-between" }}>
+          <T v="caption" style={{ backgroundColor: "rgba(4,6,14,0.85)", borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
             {selHz ? `${selHz.category_label}${selHz.is_demo ? " (demo)" : ""} · ${selHz.location_name} · ${selHz.minutes_left} min left`
-              : selLot ? `${selLot.name} · ~${selLot.available} est. open of ${selLot.snow_adjusted_capacity} · ${selLot.occupancy_pct}% full`
-                : info ?? "Tap a lot or pin"}
+              : "Tap a lot for directions"}
           </T>
-        </Pressable>
-        <T v="mono" style={{ backgroundColor: "rgba(8,11,24,0.85)", paddingHorizontal: 6, borderRadius: 6 }}>SCHEMATIC · WEB</T>
-      </View>
+          <T v="caption" style={{ backgroundColor: "rgba(4,6,14,0.85)", borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3 }}>Schematic</T>
+        </View>
+      )}
     </View>
   );
 }
