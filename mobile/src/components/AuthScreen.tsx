@@ -87,9 +87,9 @@ export default function AuthScreen() {
           </View>
 
           {/* ==================== UB CENTRAL AUTHENTICATION SERVICE ==================== */}
-          <Card style={{ gap: space.lg, borderColor: "#005BBB", borderWidth: 1.5, overflow: "hidden" }}>
+          <Card style={{ gap: space.lg, borderColor: "rgba(34, 197, 94, 0.4)", borderWidth: 1.5, overflow: "hidden" }}>
             {/* UB Header Banner */}
-            <View style={{ backgroundColor: "#005BBB", marginHorizontal: -16, marginTop: -16, padding: space.lg, gap: 4 }}>
+            <View style={{ backgroundColor: "#14532D", marginHorizontal: -16, marginTop: -16, padding: space.lg, gap: 4 }}>
               <View style={[row.between, { alignItems: "center" }]}>
                 <View style={[row.gap, { alignItems: "center", gap: space.sm }]}>
                   <View
@@ -97,12 +97,12 @@ export default function AuthScreen() {
                       width: 34,
                       height: 34,
                       borderRadius: 17,
-                      backgroundColor: "#FFFFFF",
+                      backgroundColor: "#22C55E",
                       alignItems: "center",
                       justifyContent: "center",
                     }}
                   >
-                    <Text style={{ color: "#005BBB", fontWeight: "900", fontSize: 15 }}>UB</Text>
+                    <Text style={{ color: "#021208", fontWeight: "900", fontSize: 15 }}>UB</Text>
                   </View>
                   <View>
                     <T v="subheading" color="#FFFFFF" style={{ fontSize: 15, fontWeight: "800" }}>
@@ -113,15 +113,15 @@ export default function AuthScreen() {
                     </Text>
                   </View>
                 </View>
-                <ShieldCheck size={20} color="#FFFFFF" />
+                <ShieldCheck size={20} color="#22C55E" />
               </View>
-              <View style={{ height: 1, backgroundColor: "rgba(255,255,255,0.2)", marginVertical: 4 }} />
+              <View style={{ height: 1, backgroundColor: "rgba(255,255,255,0.15)", marginVertical: 4 }} />
               <View style={[row.between, { alignItems: "center" }]}>
                 <T v="label" color="#FFFFFF" style={{ fontSize: 12 }}>
                   UBIT Central Authentication Service
                 </T>
-                <View style={{ backgroundColor: "rgba(255,255,255,0.18)", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                  <Text style={{ color: "#FFFFFF", fontSize: 9.5, fontWeight: "700" }}>SAML 2.0 / CAS</Text>
+                <View style={{ backgroundColor: "rgba(34, 197, 94, 0.25)", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                  <Text style={{ color: "#22C55E", fontSize: 9.5, fontWeight: "700" }}>SAML 2.0 / CAS</Text>
                 </View>
               </View>
             </View>
@@ -161,8 +161,8 @@ export default function AuthScreen() {
             {/* Duo Security Indicator */}
             <View
               style={{
-                backgroundColor: "rgba(0, 91, 187, 0.12)",
-                borderColor: "rgba(0, 91, 187, 0.3)",
+                backgroundColor: "rgba(34, 197, 94, 0.10)",
+                borderColor: "rgba(34, 197, 94, 0.3)",
                 borderWidth: 1,
                 borderRadius: 8,
                 padding: space.sm,
@@ -170,8 +170,8 @@ export default function AuthScreen() {
               }}
             >
               <View style={[row.gap, { alignItems: "center" }]}>
-                <CheckCircle2 size={16} color="#005BBB" />
-                <T v="label" style={{ color: "#005BBB", fontSize: 11.5, fontWeight: "700" }}>
+                <CheckCircle2 size={16} color="#22C55E" />
+                <T v="label" style={{ color: "#22C55E", fontSize: 11.5, fontWeight: "700" }}>
                   Duo Two-Factor Authentication
                 </T>
               </View>
@@ -195,8 +195,8 @@ export default function AuthScreen() {
                       setUbError(null);
                     }}
                     style={{
-                      backgroundColor: c.surfaceAlt,
-                      borderColor: ubitName === p.label ? "#005BBB" : c.border,
+                      backgroundColor: ubitName === p.label ? "rgba(34, 197, 94, 0.18)" : c.surfaceAlt,
+                      borderColor: ubitName === p.label ? "#22C55E" : c.border,
                       borderWidth: 1,
                       paddingHorizontal: 8,
                       paddingVertical: 4,
@@ -206,7 +206,7 @@ export default function AuthScreen() {
                       gap: 4,
                     }}
                   >
-                    <Text style={{ color: ubitName === p.label ? "#005BBB" : c.text, fontSize: 11, fontWeight: "600" }}>
+                    <Text style={{ color: ubitName === p.label ? "#22C55E" : c.text, fontSize: 11, fontWeight: "600" }}>
                       {p.label}
                     </Text>
                     <Text style={{ color: c.textFaint, fontSize: 9.5 }}>({p.desc})</Text>
@@ -222,18 +222,23 @@ export default function AuthScreen() {
               onPress={() => submitUbSso()}
               disabled={ubBusy}
               style={{
-                backgroundColor: "#005BBB",
+                backgroundColor: "#22C55E",
                 paddingVertical: 14,
                 borderRadius: 8,
                 alignItems: "center",
                 justifyContent: "center",
                 flexDirection: "row",
                 gap: 8,
+                shadowColor: "#22C55E",
+                shadowOpacity: 0.35,
+                shadowRadius: 8,
+                shadowOffset: { width: 0, height: 2 },
+                elevation: 4,
                 opacity: ubBusy ? 0.7 : 1,
               }}
             >
-              <Lock size={16} color="#FFFFFF" />
-              <Text style={{ color: "#FFFFFF", fontWeight: "700", fontSize: 14 }}>
+              <Lock size={16} color="#021208" />
+              <Text style={{ color: "#021208", fontWeight: "800", fontSize: 14 }}>
                 {ubBusy ? "Authenticating with UB CAS..." : "Log In to UB Services"}
               </Text>
             </Pressable>
@@ -257,7 +262,7 @@ export default function AuthScreen() {
             <View style={{ height: 1, backgroundColor: c.divider, marginVertical: space.xs }} />
 
             <Pressable onPress={auth.continueAsGuest} hitSlop={8} style={{ alignItems: "center" }} accessibilityRole="button">
-              <T v="label" color={c.textMuted}>
+              <T v="label" color={c.accent}>
                 Browse campus parking as guest →
               </T>
             </Pressable>
