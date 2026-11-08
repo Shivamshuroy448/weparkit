@@ -1,24 +1,23 @@
 import { View } from "react-native";
 import { useStore } from "../store";
-import { T } from "./ui";
+import { T, row } from "./ui";
 
-/** Bar chart of predicted occupancy around the arrival time (pitch slide 5). */
+/** Predicted occupancy in 15-minute steps around the arrival time. */
 export default function FillChart({ series }: { series: { time: string; occupancy: number; is_arrival: boolean }[] }) {
   const { c } = useStore();
-  const H = 96;
+  const H = 88;
   return (
-    <View>
-      <View style={{ flexDirection: "row", alignItems: "flex-end", height: H, gap: 4 }}>
+    <View style={{ gap: 6 }}>
+      <View style={{ flexDirection: "row", alignItems: "flex-end", height: H, gap: 3 }}>
         {series.map((p) => (
-          <View key={p.time} style={{ flex: 1, height: Math.max(4, (p.occupancy / 100) * H), borderRadius: 4,
-            backgroundColor: p.is_arrival ? c.accent : p.occupancy >= 90 ? c.orange : c.navy,
-            borderWidth: p.is_arrival ? 0 : 1, borderColor: c.line }} />
+          <View key={p.time} style={{ flex: 1, height: Math.max(3, (p.occupancy / 100) * H), borderRadius: 3,
+            backgroundColor: p.is_arrival ? c.accent : p.occupancy >= 90 ? c.warn + "73" : c.accent + "40" }} />
         ))}
       </View>
-      <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 6 }}>
-        <T v="mono">{series[0]?.time}</T>
-        <T v="mono" color={c.accent}>{series.find((s) => s.is_arrival)?.time} arrival</T>
-        <T v="mono">{series[series.length - 1]?.time}</T>
+      <View style={row.between}>
+        <T v="caption">{series[0]?.time}</T>
+        <T v="caption" color={c.accent}>Arrival {series.find((s) => s.is_arrival)?.time}</T>
+        <T v="caption">{series[series.length - 1]?.time}</T>
       </View>
     </View>
   );

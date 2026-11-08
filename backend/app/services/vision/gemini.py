@@ -8,6 +8,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import time
 
 import cv2
 import httpx
@@ -18,6 +19,8 @@ from ...config import get_settings
 log = logging.getLogger(__name__)
 settings = get_settings()
 ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+RETRIES = 2
+RETRY_STATUS = {429, 500, 503}
 
 PARKING_PROMPT = """You are analysing a photo of a university parking lot in Buffalo, NY, possibly in winter.
 Return ONLY a JSON object with these keys:
@@ -52,18 +55,30 @@ def _call(image: np.ndarray, prompt: str) -> dict | None:
             {"text": prompt},
             {"inline_data": {"mime_type": "image/jpeg", "data": base64.b64encode(buf.tobytes()).decode()}},
         ]}],
-        "generationConfig": {"response_mime_type": "application/json", "temperature": 0.1},
+        "generationConfig": {"response_mime_type": "application/json", "temperature": 0.1,
+                             **({"thinkingConfig": {"thinkingLevel": settings.gemini_thinking_level}}
+                                if settings.gemini_thinking_level else {})},
     }
-    try:
-        r = httpx.post(ENDPOINT.format(model=settings.gemini_model), params={"key": settings.gemini_api_key},
-                       json=body, timeout=30)
-        r.raise_for_status()
-        text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
-        text = text.strip().removeprefix("```json").removesuffix("```").strip()
-        return json.loads(text)
-    except Exception as exc:
-        log.warning("Gemini call failed: %s", exc)
-        return None
+    # Key goes in a header, not the query string, so it never lands in httpx/uvicorn logs.
+    headers = {"x-goog-api-key": settings.gemini_api_key.strip()}
+    url = ENDPOINT.format(model=settings.gemini_model)
+    for attempt in range(RETRIES + 1):
+        try:
+            r = httpx.post(url, headers=headers, json=body, timeout=25)
+            if r.status_code in RETRY_STATUS and attempt < RETRIES:
+                time.sleep(1.5 * (attempt + 1))  # transient overload / rate limit
+                continue
+            r.raise_for_status()
+            text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
+            text = text.strip().removeprefix("```json").removesuffix("```").strip()
+            return json.loads(text)
+        except httpx.HTTPStatusError as exc:
+            log.warning("Gemini call failed: HTTP %s from %s", exc.response.status_code, settings.gemini_model)
+            return None
+        except Exception as exc:
+            log.warning("Gemini call failed: %s", type(exc).__name__)
+            return None
+    return None
 
 
 def assess_parking(image: np.ndarray) -> dict | None:

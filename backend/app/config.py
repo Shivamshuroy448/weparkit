@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     app_name: str = "IceStation UB"
     database_url: str = f"sqlite:///{(DATA_DIR / 'icestation.db').as_posix()}"
     cors_origins: str = "http://localhost:8081,http://127.0.0.1:8081"  # Expo web; native apps ignore CORS
+    # Expo web opened from another device on the LAN (e.g. http://192.168.1.20:8081). Private ranges only.
+    cors_origin_regex: str = (r"^https?://(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+"
+                              r"|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$")
 
     # --- Vision -------------------------------------------------------------
     # auto = YOLOv8 if ultralytics + weights load, else OpenCV heuristic detector.
@@ -23,7 +26,9 @@ class Settings(BaseSettings):
     yolo_weights: str = "yolov8n.pt"
     yolo_confidence: float = 0.25
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.0-flash"
+    gemini_model: str = "gemini-3.5-flash"
+    # Gemini 3 "thinking" effort. "low" keeps a scan around 3 s; empty omits it (needed for 2.x models).
+    gemini_thinking_level: str = "low"
 
     # --- Satellite / weather ------------------------------------------------
     satellite_live_enabled: bool = True
@@ -40,6 +45,13 @@ class Settings(BaseSettings):
     nws_station: str = "KBUF"
     weather_live_enabled: bool = True
     external_timeout_s: float = 4.0
+
+    # --- Voice (ElevenLabs) ---------------------------------------------------
+    # Server-side only: the key never ships in the mobile bundle. Empty = voice briefings disabled.
+    elevenlabs_api_key: str = ""
+    elevenlabs_voice_id: str = "JBFqnCBsd6RMkjVDRZzb"
+    elevenlabs_model: str = "eleven_flash_v2_5"
+    elevenlabs_stt_model: str = "scribe_v1"   # speech-to-text for the voice co-pilot
 
     # --- Decision thresholds -----------------------------------------------
     ice_arrival_threshold_min: int = 60

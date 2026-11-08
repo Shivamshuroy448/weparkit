@@ -21,7 +21,7 @@ def get_or_create_user(db: Session, user_id: int | None) -> User:
         if u:
             return u
     for _ in range(10):
-        handle = f"Cadet {random.randint(1000, 9999)}"
+        handle = f"Student {random.randint(1000, 9999)}"
         if not db.scalar(select(User).where(User.handle == handle)):
             break
     u = User(handle=handle, is_anonymous=True)
@@ -58,7 +58,7 @@ def notify(db: Session, kind: str, title: str, body: str = "", lot_id: int | Non
 
 
 def serialize_notification(n: Notification) -> dict:
-    return {"id": n.id, "kind": n.kind, "title": n.title, "body": n.body, "lot_id": n.lot_id,
+    return {"id": n.id, "kind": n.kind, "title": n.title, "body": n.body, "lot_id": n.lot_id, "user_id": n.user_id,
             "created_at": iso(n.created_at), "expires_at": iso(n.expires_at), "is_demo": n.is_demo, "meta": n.meta}
 
 

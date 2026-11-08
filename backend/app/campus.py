@@ -98,9 +98,9 @@ HAZARD_LOCATIONS = [
 ]
 
 DEMO_USERS = [
-    ("Cadet Nova", 1240, 31, 18),
-    ("Cadet Orbit", 980, 24, 15),
-    ("Cadet Polaris", 760, 19, 9),
-    ("Cadet Lumen", 540, 12, 11),
-    ("Cadet Vega", 310, 8, 4),
+    ("Nova", 1240, 31, 18),
+    ("Kestrel", 980, 24, 15),
+    ("Polaris", 760, 19, 9),
+    ("Lumen", 540, 12, 11),
+    ("Vega", 310, 8, 4),
 ]

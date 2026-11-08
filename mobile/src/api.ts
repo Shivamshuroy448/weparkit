@@ -19,7 +19,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     res = await fetch(BASE + path, { ...init, signal: ctrl.signal });
   } catch {
-    throw new ApiError(0, `Can't reach the backend at ${BASE}. Run it with --host 0.0.0.0, allow port 8000 through the firewall, or set EXPO_PUBLIC_API_URL.`);
+    throw new ApiError(0, `Can't reach the backend at ${BASE}. Check it's running with --host 0.0.0.0 and the phone is online. If it never connects, the network may block phone-to-laptop traffic: use a hotspot or scripts/dev-tunnel.ps1.`);
   } finally {
     clearTimeout(timer);
   }
@@ -100,7 +100,7 @@ export interface Recommendation {
   simulated_clock: boolean; now: string;
 }
 
-export interface Notification { id: number; kind: string; title: string; body: string; lot_id: number | null; created_at: string; is_demo: boolean; meta: Record<string, unknown> }
+export interface Notification { id: number; kind: string; title: string; body: string; lot_id: number | null; user_id: number | null; created_at: string; is_demo: boolean; meta: Record<string, unknown> }
 export interface CrewUser {
   id: number; handle: string; points: number; reports_submitted: number; hazards_verified: number; assists_given: number;
   needs_accessible_routes: boolean; accepts_assist_requests: boolean; is_seed: boolean; rank: number | null;
@@ -142,7 +142,7 @@ export interface LocateResult {
   hazard_location: { name: string; distance_m: number } | null; on_campus: boolean;
 }
 export interface Sample { id: string; title: string; synthetic: boolean; image_url: string; has_stall_map: boolean; kind?: string }
-export interface Health { status: string; mode: Mode; vision_detector: string; gemini_configured: boolean; satellite_source: string; weather_source: string; simulated_clock: boolean; time_campus: string }
+export interface Health { status: string; mode: Mode; vision_detector: string; gemini_configured: boolean; satellite_source: string; weather_source: string; simulated_clock: boolean; time_campus: string; voice_enabled?: boolean }
 
 export const api = {
   health: () => req<Health>("/api/health"),
@@ -195,4 +195,53 @@ export const ago = (iso?: string | null) => {
   return m < 1 ? "just now" : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`;
 };
 export const sourceLabel = (s: string) =>
-  ({ seed_model: "Seed model", crew_scan: "Crew scan", crew_manual: "Crew report", demo: "Demo scan" } as Record<string, string>)[s] ?? s;
+  ({ seed_model: "Model estimate", crew_scan: "Student scan", crew_manual: "Student report", demo: "Demo scan" } as Record<string, string>)[s] ?? s;
+
+/** Shared "full" rule so lists, maps and sheets never disagree. */
+export const lotFull = (l: Pick<Lot, "available" | "snow_adjusted_capacity">) => l.available <= Math.max(2, l.snow_adjusted_capacity * 0.02);
+
+/** "LIKELY OPEN" -> "Likely open" */
+export const sentence = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s);
+
+/** Availability label -> badge tone. */
+export const availabilityTone = (label: string) =>
+  (label === "LIKELY OPEN" ? "success" : label === "TIGHT" ? "warn" : "danger") as "success" | "warn" | "danger";
+
+export const minutes = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}h ${String(Math.round(m % 60)).padStart(2, "0")}m` : `${Math.round(m)} min`);
+
+/** Backend paths that stream ElevenLabs MP3 audio (see backend/app/routers/voice.py). */
+export const voicePaths = {
+  briefing: (destination: string, arrival?: string, accessible = false) =>
+    `/api/voice/briefing?${new URLSearchParams({ destination, accessible: String(accessible), ...(arrival ? { arrival } : {}) })}`,
+  lot: (id: number) => `/api/voice/lot/${id}`,
+  alert: (kind: "ice_on" | "ice_off" | "lot_full", destination: string, lotId?: number) =>
+    `/api/voice/alert?${new URLSearchParams({ kind, destination, ...(lotId ? { lot_id: String(lotId) } : {}) })}`,
+};
+
+export interface CopilotAnswer {
+  transcript: string; intent: string; answer: string; destination: string; speech_path: string;
+  action: "directions" | null; lot: { id: number; slug: string; name: string; lat: number; lng: number } | null;
+}
+
+/** Voice co-pilot: a recorded question (ElevenLabs speech-to-text on the server) or typed text. */
+export async function askCopilot(q: { audioUri?: string; text?: string; destination: string; arrival?: string; accessible?: boolean }) {
+  const fd = new FormData();
+  if (q.text) fd.append("text", q.text);
+  if (q.audioUri) {
+    if (q.audioUri.startsWith("blob:") || q.audioUri.startsWith("data:")) {
+      // Web recorder hands back a blob URL; native FormData takes {uri,name,type}.
+      const blob = await (await fetch(q.audioUri)).blob();
+      fd.append("file", blob, "question.webm");
+    } else {
+      fd.append("file", { uri: q.audioUri, name: "question.m4a", type: "audio/mp4" } as unknown as Blob);
+    }
+  }
+  fd.append("destination", q.destination);
+  if (q.arrival) fd.append("arrival", q.arrival);
+  fd.append("accessible", String(!!q.accessible));
+  return req<CopilotAnswer>("/api/voice/ask", { method: "POST", body: fd });
+}
+
+/** Google Maps driving directions to a point. Opens the Maps app when installed, the web otherwise. */
+export const directionsUrl = (lat: number, lng: number) =>
+  `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;

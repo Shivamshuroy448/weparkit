@@ -1,18 +1,19 @@
 import { useFocusEffect } from "expo-router";
-import { Award, HandHelping } from "lucide-react-native";
 import { useCallback, useState } from "react";
-import { Switch, View } from "react-native";
+import { View } from "react-native";
 import { api, ago, type CrewUser } from "../../src/api";
 import Header from "../../src/components/Header";
-import { Button, Card, Empty, Pill, Screen, Stat, T, row } from "../../src/components/ui";
+import { Alien } from "../../src/components/SpaceArt";
+import { Badge, Button, Card, Empty, List, ListRow, Metrics, Section, Screen, T, Toggle, row } from "../../src/components/ui";
 import { useStore } from "../../src/store";
+import { space } from "../../src/theme";
 
 const ACTIONS: Record<string, string> = {
   scan: "Scanned a lot", report: "Reported a lot", hazard: "Reported a hazard", verify: "Confirmed a hazard",
-  clear: "Cleared a hazard", leaving: "Signalled leaving", assist_help: "Helped push a car", assist_request: "Asked for help",
+  clear: "Cleared a hazard", leaving: "Shared a departure", assist_help: "Helped push a car", assist_request: "Asked for help",
 };
 
-export default function CrewNetwork() {
+export default function Profile() {
   const { c, user, notifications, refresh, toast, setUser } = useStore();
   const [board, setBoard] = useState<CrewUser[]>([]);
   const [busy, setBusy] = useState<number | null>(null);
@@ -22,11 +23,12 @@ export default function CrewNetwork() {
   }, [refresh, toast]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const requests = notifications.filter((n) => n.kind === "assist" && n.title.startsWith("Stuck") && !(n.title.includes(user?.handle ?? "~~")));
+  // Open help requests carry a responders list; skip our own.
+  const requests = notifications.filter((n) => n.kind === "assist" && Array.isArray(n.meta?.responders) && n.user_id !== user?.id);
   const respond = async (id: number) => {
     if (!user) return;
     setBusy(id);
-    try { const r = await api.assist({ user_id: user.id, action: "respond", request_id: id }); toast(`On your way. +${r.points_awarded} XP`); load(); }
+    try { const r = await api.assist({ user_id: user.id, action: "respond", request_id: id }); toast(`They've been told you're coming (+${r.points_awarded} pts)`); load(); }
     catch (e) { toast((e as Error).message, "error"); } finally { setBusy(null); }
   };
   const toggleHelp = async (v: boolean) => {
@@ -35,68 +37,69 @@ export default function CrewNetwork() {
   };
 
   return (
-    <Screen header={<Header kicker="CREW NETWORK" title="Your crew" />} onRefresh={load}>
+    <Screen header={<Header title="Profile" subtitle={user ? `${user.handle} · anonymous demo profile` : undefined} />} onRefresh={load}>
       {user && (
-        <Card tone="accent" style={{ backgroundColor: c.panel2 }}>
-          <View style={row.between}>
-            <View>
-              <T v="mono">ANONYMOUS DEMO PROFILE</T>
-              <T v="h1">{user.handle}</T>
-            </View>
-            <Award size={30} color={c.accent} />
-          </View>
-          <View style={[row.wrap, { marginTop: 10 }]}>
-            <Stat label="XP" value={user.points.toLocaleString()} accent />
-            <Stat label="Rank" value={`#${user.rank ?? "—"}`} />
-            <Stat label="Reports" value={user.reports_submitted} />
-            <Stat label="Verified" value={user.hazards_verified} />
-          </View>
-          <View style={[row.between, { marginTop: 12 }]}>
-            <T v="body">Get "stuck in orbit" requests</T>
-            <Switch value={user.accepts_assist_requests} onValueChange={toggleHelp} trackColor={{ true: c.accent, false: c.line }} thumbColor={c.ink} />
-          </View>
-        </Card>
+        <>
+          <Metrics items={[
+            { label: "Points", value: user.points.toLocaleString(), color: c.accent },
+            { label: "Rank", value: `#${user.rank ?? "—"}` },
+            { label: "Reports", value: user.reports_submitted },
+            { label: "Verified", value: user.hazards_verified },
+          ]} />
+          <Card padded={false}>
+            <ListRow title="Receive help requests" subtitle="Get notified when someone nearby is stuck"
+              right={<Toggle value={user.accepts_assist_requests} onChange={toggleHelp} label="Receive help requests" />} />
+          </Card>
+        </>
       )}
 
-      <Card kicker="STUCK IN ORBIT" title="Crew who need a push">
-        {requests.length === 0 ? <T v="small">No open requests. Request help from Docking Control if your car is stuck.</T> :
-          requests.map((n) => (
-            <View key={n.id} style={[row.between, { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: c.line }]}>
-              <View style={{ flex: 1 }}>
-                <T v="h3">{n.title.replace("Stuck in orbit: ", "")}</T>
-                <T v="small">{n.body} · {ago(n.created_at)}</T>
-              </View>
-              <Button title="On my way" variant="warn" icon={<HandHelping size={14} color={c.orange} />} onPress={() => respond(n.id)} loading={busy === n.id} />
-            </View>
-          ))}
-      </Card>
+      <Section title="Help requests">
+        {requests.length === 0 ? <Empty art={<Alien size={52} />} title="No open requests">If your car is stuck, request help from the Plan tab.</Empty> : (
+          <Card padded={false}>
+            <List>
+              {requests.map((n) => (
+                <ListRow key={n.id} title={n.title} subtitle={`${n.body} · ${ago(n.created_at)}`}
+                  right={<Button size="sm" title="I'll help" onPress={() => respond(n.id)} loading={busy === n.id} />} />
+              ))}
+            </List>
+          </Card>
+        )}
+      </Section>
 
-      <Card kicker="LEADERBOARD">
-        {board.length === 0 ? <Empty title="No crew yet" /> : board.map((u) => (
-          <View key={u.id} style={[row.between, { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: c.line }]}>
-            <View style={row.gap}>
-              <T v="monoBold" color={u.rank! <= 3 ? c.accent : c.muted} style={{ width: 28 }}>#{u.rank}</T>
-              <View>
-                <T v="h3" color={u.id === user?.id ? c.accent : undefined}>{u.handle}{u.id === user?.id ? " (you)" : ""}</T>
-                <T v="small">{u.reports_submitted} reports · {u.hazards_verified} verified</T>
-              </View>
-            </View>
-            <View style={{ alignItems: "flex-end", gap: 4 }}>
-              <T v="h3">{u.points.toLocaleString()} XP</T>
-              {u.is_seed && <Pill tone="muted">seeded demo crew</Pill>}
-            </View>
-          </View>
-        ))}
-      </Card>
+      <Section title="Leaderboard">
+        {board.length === 0 ? <Empty title="No one yet" /> : (
+          <Card padded={false}>
+            <List>
+              {board.map((u) => (
+                <ListRow key={u.id}
+                  left={<T v="label" style={{ width: 24, fontVariant: ["tabular-nums"] }} color={u.id === user?.id ? c.accent : undefined}>{u.rank}</T>}
+                  title={<View style={row.gap}>
+                    <T v="subheading" color={u.id === user?.id ? c.accent : undefined}>{u.handle}{u.id === user?.id ? " (you)" : ""}</T>
+                    {u.is_seed && <Badge>Sample</Badge>}
+                  </View>}
+                  subtitle={`${u.reports_submitted} reports · ${u.hazards_verified} verified`}
+                  right={<T v="body" style={{ fontVariant: ["tabular-nums"] }}>{u.points.toLocaleString()}</T>} />
+              ))}
+            </List>
+          </Card>
+        )}
+      </Section>
 
-      <Card kicker="YOUR MISSION LOG">
-        {user?.history?.length ? user.history.map((h, i) => (
-          <View key={i} style={[row.between, { paddingVertical: 5 }]}>
-            <T v="body">{ACTIONS[h.action] ?? h.action}</T>
-            <T v="mono">+{h.points} · {ago(h.at).toUpperCase()}</T>
-          </View>
-        )) : <T v="small">Scan a lot or report a hazard to earn your first XP.</T>}
-      </Card>
+      <Section title="Activity">
+        {user?.history?.length ? (
+          <Card padded={false}>
+            <List>
+              {user.history.map((h, i) => (
+                <ListRow key={i} title={<T v="body">{ACTIONS[h.action] ?? h.action}</T>}
+                  right={<View style={{ alignItems: "flex-end" }}>
+                    <T v="body" color={c.success} style={{ fontVariant: ["tabular-nums"] }}>+{h.points}</T>
+                    <T v="caption">{ago(h.at)}</T>
+                  </View>} />
+              ))}
+            </List>
+          </Card>
+        ) : <T v="caption" style={{ paddingHorizontal: space.xs }}>Scan a lot or report a hazard to earn your first points.</T>}
+      </Section>
     </Screen>
   );
 }

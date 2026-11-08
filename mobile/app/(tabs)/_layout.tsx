@@ -1,19 +1,19 @@
 import { Tabs } from "expo-router";
-import { CircleDot, ParkingSquare, ScanLine, Satellite, Snowflake, Users } from "lucide-react-native";
+import { Footprints, Orbit, Route, ScanLine, Satellite } from "lucide-react-native";
 import type { ComponentType } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useStore } from "../../src/store";
-import { font } from "../../src/theme";
 
-type Icon = ComponentType<{ size?: number; color?: string }>;
+type Icon = ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
+
+// Order matches the file routes below. `crew` is reachable from the header profile button, not the bar.
 const TABS: Record<string, { label: string; icon: Icon }> = {
-  index: { label: "Control", icon: CircleDot },
-  dock: { label: "Dock", icon: ParkingSquare },
+  index: { label: "Overview", icon: Orbit },
+  dock: { label: "Plan", icon: Route },
   scan: { label: "Scan", icon: ScanLine },
-  orbit: { label: "Orbit", icon: Satellite },
-  ice: { label: "Ice", icon: Snowflake },
-  crew: { label: "Crew", icon: Users },
+  ice: { label: "Walkways", icon: Footprints },
+  orbit: { label: "Satellite", icon: Satellite },
 };
 
 export default function TabLayout() {
@@ -23,29 +23,20 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: c.bg } }}
       tabBar={({ state, navigateToTab }) => (
-        <View style={{ position: "absolute", left: 12, right: 12, bottom: Math.max(insets.bottom, 10), flexDirection: "row", alignItems: "center",
-          backgroundColor: c.panel, borderColor: c.line, borderWidth: 1, borderRadius: 22, paddingVertical: 8, paddingHorizontal: 4 }}>
+        <View style={{ flexDirection: "row", backgroundColor: "rgba(4,6,14,0.94)", borderTopColor: c.border, borderTopWidth: StyleSheet.hairlineWidth * 2,
+          paddingTop: 8, paddingBottom: Math.max(insets.bottom, 8) }}>
           {state.routes.map((route, i) => {
             const cfg = TABS[route.name];
             if (!cfg) return null;
             const focused = state.index === i;
-            const go = () => { if (!focused) navigateToTab(route.key); };
             const Icon = cfg.icon;
-            if (route.name === "scan") {
-              return (
-                <Pressable key={route.key} onPress={go} accessibilityLabel="Scan Station" style={{ flex: 1, alignItems: "center" }}>
-                  <View style={{ width: 58, height: 58, borderRadius: 29, backgroundColor: c.accent, alignItems: "center", justifyContent: "center",
-                    marginTop: -30, borderWidth: 4, borderColor: c.bg, shadowColor: c.accent, shadowOpacity: 0.6, shadowRadius: 14, elevation: 8 }}>
-                    <Icon size={24} color={c.bg} />
-                  </View>
-                </Pressable>
-              );
-            }
+            const color = focused ? c.accent : c.textMuted;
             return (
-              <Pressable key={route.key} onPress={go} accessibilityRole="tab" accessibilityState={{ selected: focused }}
-                style={{ flex: 1, alignItems: "center", gap: 3, paddingVertical: 2 }}>
-                <Icon size={19} color={focused ? c.accent : c.muted} />
-                <Text style={{ color: focused ? c.accent : c.muted, fontFamily: font.medium, fontSize: 10 }}>{cfg.label}</Text>
+              <Pressable key={route.key} onPress={() => { if (!focused) navigateToTab(route.key); }}
+                accessibilityRole="tab" accessibilityState={{ selected: focused }} accessibilityLabel={cfg.label}
+                style={{ flex: 1, alignItems: "center", gap: 4, paddingVertical: 2 }}>
+                <Icon size={22} color={color} strokeWidth={focused ? 2.2 : 1.8} />
+                <Text style={{ color, fontSize: 11, fontWeight: focused ? "600" : "500" }}>{cfg.label}</Text>
               </Pressable>
             );
           })}
@@ -55,8 +46,8 @@ export default function TabLayout() {
       <Tabs.Screen name="index" />
       <Tabs.Screen name="dock" />
       <Tabs.Screen name="scan" />
-      <Tabs.Screen name="orbit" />
       <Tabs.Screen name="ice" />
+      <Tabs.Screen name="orbit" />
       <Tabs.Screen name="crew" />
     </Tabs>
   );

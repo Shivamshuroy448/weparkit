@@ -36,17 +36,23 @@ def should_clear(confirmations: int, clears: int) -> bool:
     return clears >= max(1, math.ceil(confirmations / 2))
 
 
+def expire_hazards(db: Session, now: datetime | None = None) -> int:
+    """Marks active pins past their expiry as expired. Returns how many changed."""
+    now = now or utcnow()
+    stale = db.scalars(select(HazardReport).where(HazardReport.status == "active",
+                                                   HazardReport.expires_at <= now)).all()
+    for h in stale:
+        h.status = "expired"
+    if stale:
+        db.commit()
+    return len(stale)
+
+
 def active_hazards(db: Session, now: datetime | None = None) -> list[HazardReport]:
     now = now or utcnow()
-    rows = db.scalars(select(HazardReport).where(HazardReport.status == "active")).all()
-    out = []
-    for h in rows:
-        if h.expires_at <= now:
-            h.status = "expired"
-        else:
-            out.append(h)
-    db.commit()
-    return sorted(out, key=lambda h: h.created_at, reverse=True)
+    expire_hazards(db, now)
+    return list(db.scalars(select(HazardReport).where(HazardReport.status == "active")
+                           .order_by(HazardReport.created_at.desc())).all())
 
 
 def serialize(h: HazardReport) -> dict:

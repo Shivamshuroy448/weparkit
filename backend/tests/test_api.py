@@ -22,6 +22,9 @@ def test_scan_confirm_updates_lot(client):
     assert rep["lot"]["data_source"] == "crew_scan"
     assert rep["lot"]["snow_blocked_spaces"] > 0
     assert rep["points_awarded"] == 30
+    again = client.post("/api/parking/report", json={"lot_id": lot_id, "scan_id": scan["scan_id"], "user_id": me["id"]})
+    assert again.status_code == 409  # one scan, one report: no double points
+
 
 
 def test_scan_correction(client):
@@ -83,6 +86,15 @@ def test_hazard_lifecycle(client):
     assert client.get("/api/hazards").json()["hazards"] == []
 
 
+def test_clearing_override_restores_engine_reason(client):
+    auto = client.post("/api/satellite/demo-storm").json()["state"]
+    on = client.post("/api/state/mode", json={"mode": "standard"}).json()
+    assert on["decision_source"] == "manual_override" and "Manual" in on["reason"]
+    off = client.post("/api/state/mode", json={"mode": None}).json()
+    assert off["decision_source"] == "demo_storm_replay" and "Manual" not in off["reason"]
+    assert off["reason"] == auto["reason"]
+
+
 def test_locate_endpoint(client):
     lot = client.get("/api/parking/lots").json()["lots"][0]
     r = client.get("/api/parking/locate", params={"lat": lot["lat"], "lng": lot["lng"], "accuracy_m": 8}).json()
@@ -122,6 +134,13 @@ def test_leave_and_assist_and_notifications(client):
     assert a["crew_alerted"] >= 1
     resp = client.post("/api/crew/assist", json={"user_id": helper, "action": "respond", "request_id": a["request_id"]})
     assert resp.json()["points_awarded"] == 20
+    dup = client.post("/api/crew/assist", json={"user_id": helper, "action": "respond", "request_id": a["request_id"]})
+    assert dup.status_code == 409
+    feed = client.get("/api/notifications").json()["notifications"]
+    on_the_way = next(n for n in feed if n["kind"] == "assist" and n["id"] != a["request_id"])
+    assert client.post("/api/crew/assist", json={"user_id": u, "action": "respond",
+                                                 "request_id": on_the_way["id"]}).status_code == 404
+    assert next(n for n in feed if n["id"] == a["request_id"])["user_id"] == u
     kinds = {n["kind"] for n in client.get("/api/notifications").json()["notifications"]}
     assert {"leaving", "assist"} <= kinds
     board = client.get("/api/crew/leaderboard").json()["leaderboard"]
@@ -145,3 +164,19 @@ def test_reset(client):
     client.post("/api/state/mode", json={"mode": "ice"})
     assert client.post("/api/demo/reset").json()["ok"]
     assert client.get("/api/state").json()["mode"] == "standard"
+
+
+def test_expire_hazards_reports_changes(client):
+    from datetime import timedelta
+    from app.database import SessionLocal
+    from app.models import HazardReport
+    from app.services.hazards import expire_hazards
+    client.post("/api/hazards/report", data={"location_name": "Jarvis A to Davis Hall walkway", "category": "ice"})
+    with SessionLocal() as db:
+        assert expire_hazards(db) == 0
+        for h in db.query(HazardReport).all():
+            h.expires_at = h.created_at - timedelta(minutes=1)
+        db.commit()
+        assert expire_hazards(db) == 1
+        assert expire_hazards(db) == 0
+    assert client.get("/api/hazards").json()["hazards"] == []

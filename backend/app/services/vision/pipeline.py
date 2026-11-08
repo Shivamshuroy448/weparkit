@@ -120,7 +120,9 @@ def analyze_parking(data: bytes, lot_name: str, regions: dict | None = None) -> 
             bits.append(f"{space.unplowed_rows} row(s) look unplowed.")
         if space.method == "area_heuristic":
             bits.append("No stall map exists for this view, so the open-space figure is a rough estimate. Correct it if it looks off.")
-        explanation, explanation_source = " ".join(bits), "Rule-based summary of the measurements (Gemini not configured)"
+        explanation_source = ("Rule-based summary of the measurements (Gemini unavailable for this scan)" if gemini.available()
+                              else "Rule-based summary of the measurements (Gemini not configured)")
+        explanation = " ".join(bits)
 
     banner = f"{lot_name} | {len(det.vehicles)} vehicles | {space.open_spaces} open est. | {det.provider}"
     annotated = _annotate(blurred, det.vehicles, space.regions, banner)

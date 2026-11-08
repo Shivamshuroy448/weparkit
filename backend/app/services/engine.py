@@ -17,10 +17,18 @@ from .realtime import hub
 settings = get_settings()
 
 
+def display_reason(s: SystemState) -> str:
+    """`SystemState.reason` always holds the automatic engine's reason; a manual override is
+    described on top of it, so clearing the override can never leave stale manual wording."""
+    if s.manual_override:
+        return f"Manual {s.manual_override} override set from the demo toggle. Not a satellite decision."
+    return s.reason or "No satellite analysis yet."
+
+
 def serialize_state(s: SystemState) -> dict:
     return {
         "mode": s.mode, "auto_mode": s.auto_mode, "decision_source": s.decision_source,
-        "manual_override": s.manual_override, "reason": s.reason, "demo_active": s.demo_active,
+        "manual_override": s.manual_override, "reason": display_reason(s), "demo_active": s.demo_active,
         "eta_minutes": s.eta_minutes, "updated_at": iso(s.updated_at),
         "threshold_minutes": settings.ice_arrival_threshold_min,
         "source_label": {
@@ -43,20 +51,16 @@ def apply_mode(db: Session, state: SystemState) -> None:
     if prev != state.mode:
         if state.mode == "ice":
             notify(db, "ice_season", "Ice season is on",
-                   f"{serialize_state(state)['source_label']}. {state.reason}", is_demo=state.demo_active or how == "manual_override")
+                   f"{serialize_state(state)['source_label']}. {display_reason(state)}", is_demo=state.demo_active or how == "manual_override")
         elif prev == "ice":
-            notify(db, "ice_season", "Back to standard orbit", state.reason, is_demo=state.demo_active)
+            notify(db, "ice_season", "Ice season is off", display_reason(state), is_demo=state.demo_active or how == "manual_override")
     hub.publish("state")
     hub.publish("lots")
 
 
 def set_manual_override(db: Session, mode: str | None) -> SystemState:
     state = get_state(db)
-    state.manual_override = mode
-    if mode is None:
-        state.reason = state.reason or "Manual override cleared."
-    else:
-        state.reason = f"Manual {mode} override set from the demo toggle. Not a satellite decision."
+    state.manual_override = mode  # state.reason stays the engine's own reason (see display_reason)
     apply_mode(db, state)
     return state
 

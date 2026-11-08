@@ -1,38 +1,42 @@
-// Space mission-control palette from the brief. Ice season swaps the accent to orange.
-export const base = {
-  bg: "#080B18",
-  panel: "#0D1329",
-  panel2: "#121B38",
-  line: "#233057",
-  navy: "#233A65",
-  cyan: "#5DE1F2",
-  orange: "#FF9A45",
-  ink: "#ECF2FF",
-  muted: "#8A97B8",
-  good: "#6EE7A0",
-  bad: "#FF6B6B",
+// Design tokens: deep-space palette. Translucent surfaces sit over the starfield backdrop
+// (components/Starfield.tsx). Ice season swaps the accent from star-blue to amber.
+
+const space_ = {
+  bg: "#04060E",
+  surface: "rgba(13,19,40,0.78)",
+  surfaceAlt: "rgba(28,38,72,0.65)",
+  surfaceSolid: "#0B1124",
+  border: "rgba(130,160,255,0.16)",
+  divider: "rgba(130,160,255,0.10)",
+  text: "#E7ECFF",
+  textMuted: "#8D99BD",
+  textFaint: "#55618A",
+  blue: "#6CC6FF",
+  violet: "#8B7CFF",
+  amber: "#FFB547",
+  success: "#4ADE9B",
+  danger: "#FF6B6B",
 };
 
-export type Palette = typeof base & { accent: string; accentSoft: string; isIce: boolean };
+export type Palette = typeof space_ & {
+  accent: string; onAccent: string; accentSoft: string;
+  warn: string; warnSoft: string; dangerSoft: string; successSoft: string;
+  isIce: boolean;
+};
 
 export function palette(ice: boolean): Palette {
   return {
-    ...base,
-    line: ice ? "#4A342C" : base.line,
-    panel2: ice ? "#1A182C" : base.panel2,
-    accent: ice ? base.orange : base.cyan,
-    accentSoft: ice ? "rgba(255,154,69,0.14)" : "rgba(93,225,242,0.12)",
+    ...space_,
+    accent: ice ? space_.amber : space_.blue,
+    onAccent: ice ? "#1C1203" : "#03111E",
+    accentSoft: ice ? "rgba(255,181,71,0.14)" : "rgba(108,198,255,0.14)",
+    warn: space_.amber,
+    warnSoft: "rgba(255,181,71,0.14)",
+    dangerSoft: "rgba(255,107,107,0.14)",
+    successSoft: "rgba(74,222,155,0.14)",
     isIce: ice,
   };
 }
 
-export const font = {
-  regular: "SpaceGrotesk_400Regular",
-  medium: "SpaceGrotesk_500Medium",
-  semibold: "SpaceGrotesk_600SemiBold",
-  bold: "SpaceGrotesk_700Bold",
-  mono: "SpaceMono_400Regular",
-  monoBold: "SpaceMono_700Bold",
-};
-
-export const radius = { card: 18, inset: 14, pill: 999 };
+export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
+export const radius = { sm: 6, md: 10, lg: 14, pill: 999 };

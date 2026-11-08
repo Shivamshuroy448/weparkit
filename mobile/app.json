@@ -6,9 +6,9 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
-    "backgroundColor": "#080B18",
+    "backgroundColor": "#04060E",
     "splash": {
-      "backgroundColor": "#080B18",
+      "backgroundColor": "#04060E",
       "resizeMode": "contain"
     },
     "ios": {
@@ -34,7 +34,6 @@
     },
     "plugins": [
       "expo-router",
-      "expo-font",
       [
         "expo-image-picker",
         {
@@ -45,6 +44,14 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "IceStation uses your location to tell which parking lot or walkway you are reporting from."
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "IceStation listens for a short spoken question in Drive mode when you swipe down.",
+          "recordAudioAndroid": true,
+          "enableBackgroundPlayback": false
         }
       ]
     ],

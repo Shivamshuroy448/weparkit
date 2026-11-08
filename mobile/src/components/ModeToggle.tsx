@@ -1,49 +1,47 @@
-import { Pressable, Text, View } from "react-native";
+import { router } from "expo-router";
+import { ChevronRight } from "lucide-react-native";
+import { Pressable, View } from "react-native";
 import { api, type Mode } from "../api";
 import { useStore } from "../store";
-import { font } from "../theme";
-import { T } from "./ui";
+import { space } from "../theme";
+import { Badge, Card, DemoTag, Segmented, T, row } from "./ui";
 
-/** Standard orbit / Ice season switch. Tapping sets a MANUAL override (demo), which the
- *  backend reports separately from satellite-triggered decisions. */
+type Choice = "auto" | "standard" | "ice";
+
+export const modeLabel = (m?: Mode | null) => (m === "ice" ? "Ice season" : m === "watch" ? "Storm watch" : "Standard");
+
+/** Current operating mode, why it was chosen, and the demo override control.
+ *  "Automatic" clears the manual override; the backend reports overrides separately from satellite decisions. */
 export default function ModeToggle() {
   const { c, state, refresh, toast } = useStore();
-  const mode: Mode = state?.mode ?? "standard";
-  const set = async (m: Mode) => {
+  const choice: Choice = (state?.manual_override === "ice" ? "ice" : state?.manual_override ? "standard" : "auto");
+  const manual = state?.decision_source === "manual_override";
+
+  const set = async (v: Choice) => {
+    if (v === choice) return;
     try {
-      await api.setMode(m);
-      toast(m === "ice" ? "Ice season on (manual demo override)" : "Standard orbit (manual override)", "info");
+      await api.setMode(v === "auto" ? null : v);
       refresh("state", "lots");
+      toast(v === "auto" ? "Mode follows the satellite engine again" : `${modeLabel(v)} set manually (demo override)`, "info");
     } catch (e) { toast((e as Error).message, "error"); }
   };
-  const clear = async () => {
-    try { await api.setMode(null); refresh("state", "lots"); toast("Back to automatic satellite control", "info"); }
-    catch (e) { toast((e as Error).message, "error"); }
-  };
-  const opt = (m: Mode, label: string) => {
-    const on = mode === m || (m === "standard" && mode === "watch");
-    const bg = on ? (m === "ice" ? c.orange : c.cyan) : "transparent";
-    return (
-      <Pressable key={m} onPress={() => set(m)} accessibilityRole="button" accessibilityState={{ selected: on }}
-        style={{ flex: 1, paddingVertical: 11, borderRadius: 11, backgroundColor: bg, alignItems: "center" }}>
-        <Text style={{ color: on ? c.bg : c.muted, fontFamily: font.semibold, fontSize: 13 }}>{label}</Text>
-      </Pressable>
-    );
-  };
+
   return (
-    <View style={{ gap: 6 }}>
-      <View style={{ flexDirection: "row", backgroundColor: c.panel, borderColor: c.line, borderWidth: 1, borderRadius: 14, padding: 4 }}>
-        {opt("standard", "Standard orbit")}
-        {opt("ice", "Ice season")}
-      </View>
-      {state && (
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 4 }}>
-          <T v="mono" style={{ flex: 1 }}>{state.mode === "watch" ? "WATCH · " : ""}{state.source_label}</T>
-          {state.manual_override && (
-            <Pressable onPress={clear} hitSlop={8}><T v="mono" color={c.accent}>Return to auto</T></Pressable>
-          )}
+    <Card style={{ gap: space.md }}>
+      <Pressable onPress={() => router.push("/orbit")} style={[row.between, { alignItems: "flex-start" }]} accessibilityRole="button">
+        <View style={{ flex: 1, gap: 4 }}>
+          <View style={row.gap}>
+            <T v="subheading">{modeLabel(state?.mode)}</T>
+            <Badge tone={manual ? "warn" : "neutral"}>{manual ? "Manual override" : state?.demo_active ? "Auto · demo replay" : "Automatic"}</Badge>
+            {state?.demo_active && !manual && <DemoTag />}
+          </View>
+          <T v="caption" numberOfLines={3}>{state?.reason ?? "Waiting for the first satellite analysis."}</T>
         </View>
-      )}
-    </View>
+        <ChevronRight size={18} color={c.textFaint} />
+      </Pressable>
+      <Segmented<Choice>
+        options={[{ value: "auto", label: "Automatic" }, { value: "standard", label: "Standard" }, { value: "ice", label: "Ice season" }]}
+        value={choice} onChange={set} />
+    </Card>
   );
 }

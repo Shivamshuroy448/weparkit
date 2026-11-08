@@ -4,7 +4,7 @@ Hackathon prototype (UB Hacking 2026, theme Deep Space). Satellite-triggered win
 walkway-safety app for UB North Campus. Read README.md for the product pitch and run steps.
 
 ## Layout
-- `backend/`: FastAPI + SQLAlchemy 2 + SQLite + OpenCV. Python 3.11+. **Complete, 45 tests pass.**
+- `backend/`: FastAPI + SQLAlchemy 2 + SQLite + OpenCV. Python 3.11+. **Complete, 77 tests pass.**
 - `mobile/`: Expo SDK 58, React Native 0.88, React 19.3, expo-router (file routes in `app/`), TypeScript strict.
   **Type-checks clean and bundles for Android (`npx expo export --platform android`). Not yet run on a device.**
 - The original spec asked for a React web frontend; the team switched to Expo to match the pitch deck. There is no web frontend.
@@ -12,7 +12,7 @@ walkway-safety app for UB North Campus. Read README.md for the product pitch and
 ## Commands
 ```bash
 # backend (from backend/, venv active)
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --timeout-graceful-shutdown 2
 python -m pytest -q
 python -m scripts.init_db --reset          # wipe + reseed
 python -m scripts.generate_samples         # rebuild synthetic sample photos
@@ -38,8 +38,20 @@ npx expo install --fix                      # if Expo warns about versions
 - Realtime: `services/realtime.py` `hub.publish(event)` with events
   `lots | state | hazards | notifications | crew | satellite`; the mobile store refetches that resource.
   Polling every 15 s is the fallback.
-- Mobile theming: `useStore().c` is the palette; `c.accent` flips cyan → orange in ice season.
-  Use the primitives in `mobile/src/components/ui.tsx` (Screen, Card, T, Button, Pill, DemoTag...).
+- Web (`npx expo start --web`) works: `CampusMap.web.tsx` is a DOM-SVG schematic because react-native-maps (and react-native-svg pressable groups) crash in the browser.
+- Mobile design system: neutral dark, system font, one accent. `useStore().c` is the palette (`src/theme.ts`);
+  `c.accent` flips blue → amber in ice season. Use the primitives in `mobile/src/components/ui.tsx`
+  (Screen, Section, Card, List/ListRow, T, Button, Badge, DemoTag, Banner, Metrics, Field, Toggle...). Plain,
+  sentence-case copy: no space role-play wording (mission control, cadet, beam, orbit) in UI or API strings.
+- Tabs: Overview · Plan · Scan · Walkways · Satellite. Profile (`crew.tsx`) opens from the header, not the tab bar.
+- Voice: ElevenLabs key is **server-only** (`ELEVENLABS_API_KEY`). `services/voice.py` builds the spoken text itself
+  (no open TTS proxy) and caches audio; mobile `src/voice.ts` streams `/api/voice/*` via expo-audio and hides
+  Listen buttons unless `/api/health` reports `voice_enabled`.
+- Directions: `directionsUrl()` in `src/api.ts` opens Google Maps driving directions; `LotSheet` on both maps.
+- Drive mode (`app/drive.tsx`): full-screen gesture pad (tap/swipe ←→↑↓/long-press/shake), keep-awake, haptics.
+  Swipe down records 5 s → `/api/voice/ask`. Intents are parsed by `services/copilot.py` (pure, tested, keyword
+  rules, not an LLM); answers are server-written. Proactive alerts on ice-season flips and when the best lot fills.
+  `src/voice.ts` falls back to expo-speech (device voice) reading the server script if ElevenLabs is off/unreachable.
 - API base URL: `mobile/src/config.ts` (EXPO_PUBLIC_API_URL → Metro host IP:8000 → emulator fallbacks).
 
 ## Key endpoints
@@ -48,7 +60,9 @@ npx expo install --fix                      # if Expo warns about versions
 `POST /api/parking/leave` · `GET /api/weather/current` · `GET /api/satellite/status` · `POST /api/satellite/analyze` ·
 `POST /api/satellite/demo-storm` · `POST /api/state/mode` (manual override, null clears) · `POST /api/demo/reset` ·
 `GET /api/hazards` · `GET /api/hazards/routes` · `POST /api/hazards/report` · `POST /api/hazards/{id}/vote|clear` ·
-`POST /api/crew/me` · `GET /api/crew/leaderboard` · `POST /api/crew/assist` · `GET /api/notifications` · `WS /ws`.
+`POST /api/crew/me` · `GET /api/crew/leaderboard` · `POST /api/crew/assist` · `GET /api/notifications` ·
+`GET /api/voice/status|briefing|lot/{id}|alert?kind=ice_on|ice_off|lot_full` (audio/mpeg; `text_only=true` for the script) ·
+`POST /api/voice/ask` (audio → ElevenLabs Scribe STT, or `text`) → `GET /api/voice/say/{token}` · `WS /ws`.
 Full docs at `/docs`.
 
 ## Not done yet / next tasks (in priority order)
@@ -74,8 +88,9 @@ Full docs at `/docs`.
 - Windows: venv python is `backend\.venv\Scripts\python.exe`. Windows Firewall blocks phones on Public networks:
   allow inbound TCP 8000 and 8081 (admin PowerShell) or use a hotspot / tunnel.
 - `expo start --tunnel` only tunnels Metro; set `EXPO_PUBLIC_API_URL` to a public backend URL in that case.
-- Phones can't reach `localhost`; run uvicorn with `--host 0.0.0.0`. Campus Wi-Fi may block device-to-device
-  traffic; use a hotspot or tunnels.
+- Phones can't reach `localhost`; run uvicorn with `--host 0.0.0.0`. Keep `--timeout-graceful-shutdown 2`: without it `--reload` hangs while phones hold the /ws socket open.
+- Expo web from another device: `config.ts` uses `window.location.hostname:8000`; CORS allows private LAN origins via `CORS_ORIGIN_REGEX`.
+- Campus Wi-Fi may block device-to-device traffic; use a hotspot or tunnels.
 - OpenCV 5 removed `CascadeClassifier`; `requirements.txt` installs 4.x so Haar face/plate blur works.
   The privacy module degrades gracefully either way.
 - `SIM_CLOCK=09:40` in `backend/.env` makes the seed model behave like a weekday morning for night-time demos.

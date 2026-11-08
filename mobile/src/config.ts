@@ -8,6 +8,10 @@ import { Platform } from "react-native";
 function resolve(): string {
   const env = process.env.EXPO_PUBLIC_API_URL;
   if (env) return env.replace(/\/$/, "");
+  // Web: the backend runs on the same machine that served this page (works from a phone's browser too).
+  if (Platform.OS === "web" && typeof window !== "undefined" && window.location?.hostname) {
+    return `${window.location.protocol === "https:" ? "https" : "http"}://${window.location.hostname}:8000`;
+  }
   const host = Constants.expoConfig?.hostUri?.split(":")[0];
   // With `expo start --tunnel` the host is an ngrok/exp.direct domain that only proxies Metro, not :8000.
   const isTunnel = !!host && /(\.exp\.direct|ngrok|\.ngrok-free\.app)$/.test(host);
