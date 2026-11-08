@@ -168,17 +168,34 @@ class UbSsoIn(BaseModel):
 @router.post("/ub-sso")
 def ub_sso(body: UbSsoIn, db: Session = Depends(get_db)):
     """University at Buffalo Central Authentication Service (Shibboleth / CAS).
-    Authenticates or provisions a verified @buffalo.edu student account via UBITName."""
+    Authenticates a verified @buffalo.edu student account via UBITName and password."""
     raw = body.ubit_name.strip().lower()
     ubit = raw.split("@")[0] if "@" in raw else raw
     ubit = re.sub(r"[^a-z0-9._-]", "", ubit)
-    if not ubit or len(ubit) < 2:
+    if not ubit or len(ubit) < 2 or not re.fullmatch(r"[a-z0-9._-]{2,20}", ubit):
         raise HTTPException(422, "Enter a valid UBITName (e.g. sroy, victor_bull, or yourname@buffalo.edu).")
 
+    if not body.password or len(body.password) < 6:
+        raise HTTPException(422, "Enter your UBIT password (minimum 6 characters).")
+
     email = f"{ubit}@buffalo.edu"
+    auth.check_not_locked(email)
 
     acct = db.scalar(select(Account).where(Account.email == email))
-    if acct is None:
+    if acct is not None:
+        # Strictly verify the password against the stored hash
+        if not auth.verify_password(body.password, acct.password_hash):
+            auth.record_failure(email)
+            raise HTTPException(401, "Invalid UBITName or password. Enter your correct UBIT credentials.")
+        auth.clear_failures(email)
+        if not acct.email_verified:
+            acct.email_verified = True
+            db.commit()
+    else:
+        # First-time registration with this UBITName: establish student account with this password
+        if len(body.password) < 8:
+            raise HTTPException(422, "New UBIT password must be at least 8 characters (UB IT policy).")
+
         user = db.get(User, body.anonymous_user_id) if body.anonymous_user_id else None
         if user is None or user.is_seed or db.scalar(select(Account).where(Account.user_id == user.id)):
             user = User(handle=auth.unique_handle(db, ubit.capitalize(), email), is_anonymous=False)
@@ -188,15 +205,10 @@ def ub_sso(body: UbSsoIn, db: Session = Depends(get_db)):
             user.is_anonymous = False
             user.handle = auth.unique_handle(db, ubit.capitalize(), email)
         
-        pw = body.password if len(body.password) >= 8 else "UB-SsoPass-2026!"
-        acct = Account(email=email, password_hash=auth.hash_password(pw),
+        acct = Account(email=email, password_hash=auth.hash_password(body.password),
                        name=ubit.capitalize(), user_id=user.id, email_verified=True)
         db.add(acct)
         db.commit()
-    else:
-        if not acct.email_verified:
-            acct.email_verified = True
-            db.commit()
 
     session_data = _session(db, acct)
     session_data["sso"] = {

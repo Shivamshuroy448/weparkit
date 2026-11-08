@@ -84,6 +84,10 @@ export default function AuthScreen() {
       setUbError("Enter a valid UBITName (e.g. sroy, victor_bull, or yourname@buffalo.edu).");
       return;
     }
+    if (!ubitPassword || ubitPassword.length < 6) {
+      setUbError("Enter your UBIT password (minimum 6 characters).");
+      return;
+    }
     setUbBusy(true);
     setUbError(null);
     try {
@@ -198,7 +202,8 @@ export default function AuthScreen() {
                       key={p.label}
                       onPress={() => {
                         setUbitName(p.label);
-                        setUbitPassword("UB-SsoPass-2026!");
+                        setUbitPassword("password123");
+                        setUbError(null);
                       }}
                       style={{
                         backgroundColor: c.surfaceAlt,

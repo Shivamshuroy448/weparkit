@@ -118,18 +118,30 @@ def test_auth_required_mode(client, monkeypatch):
 
 
 def test_ub_single_sign_on(client):
-    # Test with UBITName
-    r = client.post("/api/auth/ub-sso", json={"ubit_name": "sroy"}).json()
+    # Missing/short password rejected
+    assert client.post("/api/auth/ub-sso", json={"ubit_name": "sroy"}).status_code == 422
+    assert client.post("/api/auth/ub-sso", json={"ubit_name": "sroy", "password": "123"}).status_code == 422
+
+    # New student signup with valid password
+    r = client.post("/api/auth/ub-sso", json={"ubit_name": "sroy", "password": "snowday-2026"}).json()
     assert r["token"] and r["account"]["email"] == "sroy@buffalo.edu"
     assert r["account"]["email_verified"] is True
     assert r["sso"]["provider"] == "University at Buffalo (Shibboleth CAS)"
     assert r["sso"]["ubit_name"] == "sroy"
     assert r["sso"]["permit_tier"] == "Commuter"
 
-    # Test with full @buffalo.edu address
-    r2 = client.post("/api/auth/ub-sso", json={"ubit_name": "victor.bull@buffalo.edu"}).json()
+    # Existing student with correct password succeeds
+    ok = client.post("/api/auth/ub-sso", json={"ubit_name": "sroy", "password": "snowday-2026"})
+    assert ok.status_code == 200
+
+    # Existing student with wrong random password rejected with 401
+    bad_pw = client.post("/api/auth/ub-sso", json={"ubit_name": "sroy", "password": "wrongrandompassword"})
+    assert bad_pw.status_code == 401
+    assert "Invalid UBITName or password" in bad_pw.json()["detail"]
+
+    # Full email address format works
+    r2 = client.post("/api/auth/ub-sso", json={"ubit_name": "victor.bull@buffalo.edu", "password": "snowday-2026"}).json()
     assert r2["token"] and r2["account"]["email"] == "victor.bull@buffalo.edu"
 
-    # Test invalid UBITName
-    bad = client.post("/api/auth/ub-sso", json={"ubit_name": "x"})
-    assert bad.status_code == 422
+    # Invalid UBITName format rejected
+    assert client.post("/api/auth/ub-sso", json={"ubit_name": "x", "password": "snowday-2026"}).status_code == 422
