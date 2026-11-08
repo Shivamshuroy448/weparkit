@@ -171,7 +171,6 @@ def lookup_ub_directory(ubit: str) -> dict | None:
     or is a recognized campus demonstration account."""
     demo_accounts = {
         "sroy": {"name": "Sroy", "role": "Commuter"},
-        "svelamak": {"name": "Shivamshu Roy Velamakanni", "role": "Student Commuter"},
         "victor_bull": {"name": "Victor E. Bull", "role": "Student"},
         "victor.bull": {"name": "Victor E. Bull", "role": "Student"},
         "capen_scholar": {"name": "Capen Scholar", "role": "Faculty / Staff"},
